@@ -1,0 +1,4 @@
+flask
+openai
+azure-cognitiveservices-speech
+azure-communication-calling
