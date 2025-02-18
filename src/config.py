@@ -1,14 +1,16 @@
 # src/config.py
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from a .env file
+load_dotenv()
+
 # Azure Speech Services Config
-AZURE_SPEECH_KEY = "YOUR_AZURE_SPEECH_KEY"
-AZURE_SPEECH_REGION = "YOUR_AZURE_REGION"
+AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
+AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")
 
-# Azure OpenAI (GPT-4) Config
-OPENAI_API_KEY = "YOUR_OPENAI_KEY"
-OPENAI_API_BASE = "https://YOUR_OPENAI_INSTANCE.openai.azure.com/"
-OPENAI_API_VERSION = "2023-06-01-preview"
-
-# Azure Communication Services (ACS) Config
-ACS_CONNECTION_STRING = "YOUR_ACS_CONNECTION_STRING"
-
+# Azure LLM (Inference SDK) Config
+AZURE_INFERENCE_SDK_ENDPOINT = os.getenv("AZURE_INFERENCE_SDK_ENDPOINT")
+AZURE_INFERENCE_SDK_KEY = os.getenv("AZURE_INFERENCE_SDK_KEY")
+DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")

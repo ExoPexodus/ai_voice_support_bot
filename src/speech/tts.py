@@ -11,10 +11,10 @@ def text_to_speech(text):
     result = synthesizer.speak_text_async(text).get()
     
     if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-        print("Speech synthesized for text: [{}]".format(text))
+        print("Synthesized speech for text:", text)
     elif result.reason == speechsdk.ResultReason.Canceled:
         cancellation_details = result.cancellation_details
-        print("Speech synthesis canceled: {}".format(cancellation_details.reason))
+        print("Speech synthesis canceled:", cancellation_details.reason)
 
 if __name__ == "__main__":
     text_to_speech("Hello, how can I assist you today?")
