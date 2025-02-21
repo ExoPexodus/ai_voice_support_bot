@@ -2,7 +2,7 @@
 
 import os
 from azure.ai.inference import ChatCompletionsClient
-from azure.ai.inference.models import SystemMessage, UserMessage
+from azure.ai.inference.models import SystemMessage, UserMessage, AssistantMessage
 from azure.core.credentials import AzureKeyCredential
 from src.config import AZURE_INFERENCE_SDK_ENDPOINT, AZURE_INFERENCE_SDK_KEY, DEPLOYMENT_NAME
 
@@ -14,35 +14,34 @@ client = ChatCompletionsClient(
 
 def query_llm(conversation_history, max_tokens=1000):
     """
-    Queries the Azure-hosted LLM with a conversation history containing only system and user messages.
-    :param conversation_history: List of dicts with "role" (system/user) and "content".
-    :param max_tokens: Maximum tokens to generate.
-    :return: The LLM-generated response text.
+    Queries the Azure-hosted LLM with the entire conversation history.
+    The conversation_history should include messages with roles: system, user, and assistant.
     """
     messages = []
     for msg in conversation_history:
-        role = msg.get("role")
+        role = msg.get("role").lower()
         content = msg.get("content")
         if role == "system":
             messages.append(SystemMessage(content=content))
         elif role == "user":
             messages.append(UserMessage(content=content))
-        # Ignore any assistant messages
+        elif role == "assistant":
+            messages.append(AssistantMessage(content=content))
     try:
         response = client.complete(
             messages=messages,
             model=DEPLOYMENT_NAME,
             max_tokens=max_tokens
         )
-        return response.choices[0].message.content  # Return the generated text
+        return response.choices[0].message.content
     except Exception as e:
         print(f"LLM Error: {e}")
         return "Sorry, I encountered an issue processing your request."
 
 if __name__ == "__main__":
-    # Simple test
+    # Quick test
     test_history = [
         {"role": "system", "content": "You are a customer support executive for Zomato."},
-        {"role": "user", "content": "How do I track my order 12345?"}
+        {"role": "user", "content": "How do I track my order 1113?"}
     ]
     print("LLM Response:", query_llm(test_history))

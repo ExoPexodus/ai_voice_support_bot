@@ -1,9 +1,9 @@
 order_id,Order status,Estimated Time of delivery,Delivery Partner's name,Delivery partner's contact info,restaurant ID,support count,last support session id
 1113,Delivered,n/a,Jack Mathew,9988746231,4421,2,3342
-2523,Not Delivered,30 minutes,Kevin,7762314121,4451,0,n/a
+2523,Being Delivered,30 minutes,Kevin,7762314121,4451,0,n/a
 3982,Canceled,n/a,n/a,n/a,4421,0,n/a
 4729,Delivered,n/a,Ubeksh,8443567281,5613,1,5543
 5938,Delivered,n/a,Jerremy binston,9987442312,2245,1,1123
 6923,Canceled,n/a,n/a,n/a,1134,0,n/a
-7780,Not Delivered,55 minutes,Ricardo,9876589879,2245,0,n/a
+7780,preparing,55 minutes,Ricardo,9876589879,2245,0,n/a
 4451,Not Delivered,20 minutes,jack Mathew,9988746231,2245,0,n/a
