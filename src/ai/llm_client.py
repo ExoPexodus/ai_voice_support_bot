@@ -6,36 +6,43 @@ from azure.ai.inference.models import SystemMessage, UserMessage
 from azure.core.credentials import AzureKeyCredential
 from src.config import AZURE_INFERENCE_SDK_ENDPOINT, AZURE_INFERENCE_SDK_KEY, DEPLOYMENT_NAME
 
-# Initialize Azure AI Inference SDK Client
+# Initialize the Azure AI Inference SDK Client
 client = ChatCompletionsClient(
     endpoint=AZURE_INFERENCE_SDK_ENDPOINT,
     credential=AzureKeyCredential(AZURE_INFERENCE_SDK_KEY)
 )
 
-def query_llm(prompt, system_message="You are an AI assistant helping with customer support.", max_tokens=1000):
+def query_llm(conversation_history, max_tokens=1000):
     """
-    Queries the Azure-hosted LLM using the Azure AI Inference SDK.
-
-    :param prompt: User's input message.
-    :param system_message: System role description.
+    Queries the Azure-hosted LLM with a conversation history containing only system and user messages.
+    :param conversation_history: List of dicts with "role" (system/user) and "content".
     :param max_tokens: Maximum tokens to generate.
-    :return: LLM-generated response.
+    :return: The LLM-generated response text.
     """
+    messages = []
+    for msg in conversation_history:
+        role = msg.get("role")
+        content = msg.get("content")
+        if role == "system":
+            messages.append(SystemMessage(content=content))
+        elif role == "user":
+            messages.append(UserMessage(content=content))
+        # Ignore any assistant messages
     try:
         response = client.complete(
-            messages=[
-                SystemMessage(content=system_message),
-                UserMessage(content=prompt),
-            ],
+            messages=messages,
             model=DEPLOYMENT_NAME,
             max_tokens=max_tokens
         )
-        return response.choices[0].message.content  # Extract response text
-
+        return response.choices[0].message.content  # Return the generated text
     except Exception as e:
         print(f"LLM Error: {e}")
         return "Sorry, I encountered an issue processing your request."
 
 if __name__ == "__main__":
-    test_prompt = "How can I reset my password?"
-    print("LLM Response:", query_llm(test_prompt))
+    # Simple test
+    test_history = [
+        {"role": "system", "content": "You are a customer support executive for Zomato."},
+        {"role": "user", "content": "How do I track my order 12345?"}
+    ]
+    print("LLM Response:", query_llm(test_history))

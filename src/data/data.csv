@@ -1,4 +1,4 @@
-Order ID,Order status,Estimated Time of delivery,Delivery Partner's name,Delivery partner's contact info,restaurant ID,support count,last support session id
+order_id,Order status,Estimated Time of delivery,Delivery Partner's name,Delivery partner's contact info,restaurant ID,support count,last support session id
 1113,Delivered,n/a,Jack Mathew,9988746231,4421,2,3342
 2523,Not Delivered,30 minutes,Kevin,7762314121,4451,0,n/a
 3982,Canceled,n/a,n/a,n/a,4421,0,n/a
