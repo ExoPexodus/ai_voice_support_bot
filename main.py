@@ -5,23 +5,40 @@ from src.ai import llm_client
 from src.data import data_fetcher
 from src.utils import logger
 import re
+import spacy
+
+# Load spaCy English model
+nlp = spacy.load("en_core_web_sm")
 
 def extract_order_number(text):
     """
-    Attempts to extract an order number from the given text.
-    Looks for patterns like "order id 1113", "order number 1113", or "order 1113".
-    This regex also handles phrases like "order id is supposed to be 1113".
-    :return: The order number as a string if found, otherwise None.
+    Extracts order numbers from user input using NLP + regex.
     """
-    pattern = r'\border(?:\s*(?:id|number))?\s*(?:is\s*)?(?:[:#]?\s*)?(\d+)'
+    doc = nlp(text)
+    
+    # Try extracting numbers using NLP
+    for ent in doc.ents:
+        if ent.label_ == "CARDINAL":  # spaCy detects numbers as "CARDINAL"
+            # Check if "order" or similar words appear near the number
+            if any(token.text.lower() in ["order", "id", "number"] for token in ent.root.head.lefts):
+                print(f"[DEBUG] Extracted order number via NLP: {ent.text}")
+                return ent.text
+
+    # Fallback: Use regex to catch missed cases
+    pattern = r'\b(?:order(?:\s*(?:id|number))?|id|number)?\s*(?:is|was|should be|supposed to be)?\s*[:#]?\s*(\d{3,10})'
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
-        order_num = match.group(1)
-        print(f"[DEBUG] Extracted order number: {order_num}")
-        return order_num
-    else:
-        print("[DEBUG] No order number found in the input.")
+        print(f"[DEBUG] Extracted order number via Regex: {match.group(1)}")
+        return match.group(1)
+
+    # Final fallback: If user ONLY says a number, assume it's an order ID
+    if text.strip().isdigit():
+        print(f"[DEBUG] Extracted standalone order number: {text.strip()}")
+        return text.strip()
+
+    print("[DEBUG] No order number found in the input.")
     return None
+
 
 def main_flow():
     log = logger.setup_logger()
@@ -32,11 +49,11 @@ def main_flow():
     tts.text_to_speech(welcome_message)
     
     # Initialize conversation history with a system prompt for context
-    system_prompt = "You are a customer support executive working for zomato, you are an expert at dealing with customers in food industry, answer all their questions according to how a customer support would. Keep in mind that you'll be in a call with the customer so Make sure you have a very nice and gentle tone when dealing with the customer, And also make sure to give very short and very concise and to the point answers(don't use any special caracters or emojis or any brackets to express any additional emotions or actions)"
+    system_prompt = "You are a female customer support executive working for zomato, you are an expert at dealing with customers in food industry, answer all their questions according to how a customer support would. Keep in mind that you'll be in a call with the customer so Make sure you have a very nice and gentle tone when dealing with the customer, And also make sure to give very short and very concise and to the point answers(don't use any special caracters or emojis or any brackets to express any additional emotions or actions)"
     conversation_history = [{"role": "system", "content": system_prompt}]
 
     # Define exit keywords for ending the session
-    exit_keywords = ["bye", "exit", "quit", "end call", "end the call", "goodbye"]
+    exit_keywords = ["bye", "exit", "quit", "end call", "end the call", "goodbye", "thank you", "that's all"]
 
     while True:
         # Wait for user input with a 30-second timeout
