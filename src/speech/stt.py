@@ -27,7 +27,7 @@ def _recognize_once():
             print(f"Error details: {cancellation_details.error_details}")
         return None
 
-def speech_to_text(timeout=30):
+def speech_to_text(timeout=120):
     """
     Listens for user speech and returns the recognized text.
     """
