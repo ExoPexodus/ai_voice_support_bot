@@ -57,9 +57,9 @@ def main_flow():
 
     while True:
         # Wait for user input with a 30-second timeout
-        user_input = stt.speech_to_text(timeout=30)
+        user_input = stt.speech_to_text(timeout=60)
         if user_input is None:
-            tts.text_to_speech("No input received for 30 seconds. Ending session. Goodbye!")
+            tts.text_to_speech("No input received for 60 seconds. Ending session. Goodbye!")
             break
         
         # Check if any exit keyword is contained in the user input

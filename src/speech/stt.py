@@ -7,7 +7,7 @@ def _recognize_once():
     Recognizes speech once using Azure STT with a configurable language.
     """
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
-    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, language="hi-IN")
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, language="en-IN")
 #    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, language=AZURE_STT_LANGUAGE)
 
     print(f"Say something... (Listening in {AZURE_STT_LANGUAGE})")

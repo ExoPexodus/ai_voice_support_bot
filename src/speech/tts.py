@@ -6,7 +6,9 @@ def text_to_speech(text):
     Converts text to speech using Azure TTS with a configurable voice.
     """
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
-    speech_config.speech_synthesis_voice_name =  "hi-IN-AnanyaNeural" #AZURE_TTS_VOICE  # Use configured voice
+    
+    speech_config.speech_synthesis_voice_name =  "en-IN-NeerjaNeural" #AZURE_TTS_VOICE  # Use configured voice
+    #speech_config.speech_synthesis_voice_name =  "hi-IN-AnanyaNeural" #AZURE_TTS_VOICE  # Use configured voice
     audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
 
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
