@@ -7,9 +7,8 @@ This server listens for AGI requests over TCP and dispatches them to your AGI lo
 import socketserver
 import sys
 import logging
-import os
+import io
 
-# Import your AGI logic wrapper (we create one below)
 from asterisk.agi import AGI
 
 # --- Wrapper for your AGI main flow that uses a provided AGI instance ---
@@ -23,12 +22,12 @@ def agi_main_flow_custom(agi):
     from src.ai import llm_client
     from src.data import data_fetcher
     from src.speech import tts, stt
-    import time, re
+    import time, os, re
 
     log = logger.setup_logger()
     agi.verbose("Starting FastAGI Voice Support Bot", level=1)
     
-    # Get AGI environment from the connection
+    # Get AGI environment from the connection.
     env = agi.get_environment()
     log.info("AGI Environment: %s", env)
     
@@ -39,7 +38,7 @@ def agi_main_flow_custom(agi):
     welcome_wav = f"/var/lib/asterisk/sounds/welcome_{uniqueid}.wav"
     tts.generate_tts_file(welcome_message, welcome_wav)
     agi.verbose("Playing welcome message", level=1)
-    # Asterisk will look for a file named "welcome_<uniqueid>" in its sounds directory.
+    # Asterisk will search for a file named "welcome_<uniqueid>" (without extension)
     agi.stream_file(f"welcome_{uniqueid}")
     
     # --- Initialize conversation history ---
@@ -56,18 +55,14 @@ def agi_main_flow_custom(agi):
         
         agi.verbose("About to record caller input", level=1)
         agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=2)
-        # Allow a short delay to ensure the file is written
         time.sleep(2)
-        
-        if not os.path.exists(input_wav):
-            agi.verbose(f"Recording file NOT found: {input_wav}", level=1)
-        else:
+        if os.path.exists(input_wav):
             agi.verbose(f"Recording file exists: {input_wav}", level=1)
+        else:
+            agi.verbose(f"Recording file NOT found: {input_wav}", level=1)
         
-        # Process recorded audio using STT
         user_input = stt.recognize_from_file(input_wav)
         agi.verbose(f"STT returned: {user_input}", level=1)
-        
         if not user_input:
             goodbye_message = "No input received. Ending session. Goodbye!"
             goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
@@ -87,7 +82,7 @@ def agi_main_flow_custom(agi):
             agi.stream_file(f"goodbye_{uniqueid}")
             break
         
-        # Extract order number if present
+        # --- Extract Order Number if Present ---
         pattern = r'\b(?:order(?:\s*(?:id|number))?|id|number)?\s*(?:is|was|should be|supposed to be)?\s*[:#]?\s*(\d{3,10})'
         match = re.search(pattern, user_input, re.IGNORECASE)
         if match:
@@ -100,13 +95,13 @@ def agi_main_flow_custom(agi):
         else:
             log.info("No order number found in input.")
         
-        # Query LLM for a response
+        # --- Query LLM for Response ---
         ai_response = llm_client.query_llm(conversation_history)
         clean_response = ai_response.replace("<|im_start|>assistant<|im_sep|>", "").replace("<|im_end|>", "").strip()
         conversation_history.append({"role": "assistant", "content": clean_response})
         agi.verbose(f"AI Response: {clean_response}", level=1)
         
-        # Generate TTS for the AI response and play it
+        # --- Generate and Play AI Response ---
         response_wav = f"/var/lib/asterisk/sounds/response_{uniqueid}.wav"
         tts.generate_tts_file(clean_response, response_wav)
         agi.verbose("Playing AI response", level=1)
@@ -114,24 +109,26 @@ def agi_main_flow_custom(agi):
     
     agi.hangup()
 
-# --- FastAGI Handler using ForkingTCPServer ---
+# --- FastAGI Handler using Forking ---
 class FastAGIHandler(socketserver.StreamRequestHandler):
     def handle(self):
         try:
-            # Create an AGI instance with the connection's streams.
+            # Wrap the binary streams with TextIOWrapper so we work with text.
+            self.rfile = io.TextIOWrapper(self.rfile, encoding="utf-8")
+            self.wfile = io.TextIOWrapper(self.wfile, encoding="utf-8", write_through=True)
+            
             agi = AGI(stdin=self.rfile, stdout=self.wfile)
             self.server.logger.info("FastAGI request from %s", self.client_address)
             agi_main_flow_custom(agi)
         except Exception as e:
             self.server.logger.error("Exception in FastAGIHandler: %s", e)
 
-# Use ForkingTCPServer to avoid thread-related signal issues.
+# Use ForkingTCPServer to handle each AGI connection in a separate process.
 class FastAGIServer(socketserver.ForkingTCPServer):
     allow_reuse_address = True
 
 if __name__ == "__main__":
     HOST, PORT = "0.0.0.0", 4577
-    # Set up a basic logger for the FastAGI server.
     logger_server = logging.getLogger("FastAGIServer")
     logger_server.setLevel(logging.INFO)
     handler = logging.StreamHandler(sys.stdout)
