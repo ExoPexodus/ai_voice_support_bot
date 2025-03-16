@@ -67,10 +67,15 @@ def agi_main_flow():
         # === Record Caller Input ===
         agi.verbose("Recording caller input", level=1)
         input_filename = f"input_{uniqueid}"
-        # Record audio from the channel for up to 60 seconds with 2 seconds of silence
-        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=2)
         # Construct the full path of the recorded file
         input_audio_path = f"/var/lib/asterisk/sounds/{input_filename}.wav"
+        
+        agi.verbose("About to record caller input", level=1)
+        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=2)
+        if os.path.exists(input_audio_path):
+            agi.verbose(f"Recording file exists: {input_audio_path}", level=1)
+        else:
+            agi.verbose(f"Recording file NOT found: {input_audio_path}", level=1)
         
         # Process recorded audio using STT (this function should return the transcribed text)
         user_input = stt.recognize_from_file(input_audio_path)
