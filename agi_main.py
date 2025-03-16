@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/storage/code/ai_voice_support_bot/venv/bin/python3
 """
 agi_main.py - AGI entry point for your Zomato customer support bot.
 This script is invoked by Asterisk via AGI and uses file-based audio I/O.
