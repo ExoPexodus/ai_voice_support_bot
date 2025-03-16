@@ -122,7 +122,7 @@ class FastAGIServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
 if __name__ == "__main__":
-    HOST, PORT = "0.0.0.0", 4573
+    HOST, PORT = "0.0.0.0", 4577
     # Set up a basic logger for the FastAGI server
     import logging
     logger_server = logging.getLogger("FastAGIServer")
