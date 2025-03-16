@@ -7,6 +7,7 @@ This script is invoked by Asterisk via AGI and uses file-based audio I/O.
 import os
 import re
 import sys
+import time
 from asterisk.agi import AGI
 
 # Import modules from your existing codebase
@@ -72,6 +73,8 @@ def agi_main_flow():
         
         agi.verbose("About to record caller input", level=1)
         agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=2)
+        # Wait a couple of seconds to ensure file is written
+        time.sleep(2)
         if os.path.exists(input_audio_path):
             agi.verbose(f"Recording file exists: {input_audio_path}", level=1)
         else:

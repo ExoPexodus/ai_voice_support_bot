@@ -1,4 +1,5 @@
 import azure.cognitiveservices.speech as speechsdk
+import subprocess
 from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, AZURE_TTS_VOICE
 
 def text_to_speech(text):
@@ -23,11 +24,14 @@ def generate_tts_file(text, output_file):
     The output_file should be a full path (e.g., /var/lib/asterisk/sounds/welcome.wav).
     """
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
-    # Configure the desired voice
+    # Set the voice and desired output format to Raw8Khz8BitMuLaw
     speech_config.speech_synthesis_voice_name = "en-IN-NeerjaNeural"
+    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Raw8Khz8BitMuLaw)
+    
     # Use AudioOutputConfig with filename to save to file
     audio_config = speechsdk.audio.AudioOutputConfig(filename=output_file)
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+    
     result = synthesizer.speak_text_async(text).get()
     if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
         print(f"[INFO] Generated TTS file at: {output_file}")
