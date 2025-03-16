@@ -6,7 +6,7 @@ This server listens for AGI requests over TCP and dispatches them to your AGI lo
 
 import socketserver
 import sys
-from src.agi_main import agi_main_flow  # Ensure your agi_main_flow is refactored to accept custom I/O if needed
+from agi_main import agi_main_flow  # Ensure your agi_main_flow is refactored to accept custom I/O if needed
 from asterisk.agi import AGI
 
 # You may need to modify agi_main_flow to accept stdin/stdout streams.
