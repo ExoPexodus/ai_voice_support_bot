@@ -26,7 +26,6 @@ def generate_tts_file(text, output_file):
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
     # Set the voice and desired output format to Raw8Khz8BitMonoALaw
     speech_config.speech_synthesis_voice_name = "en-IN-NeerjaNeural"
-    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Raw8Khz8BitMonoALaw)
     
     # Use AudioOutputConfig with filename to save to file
     audio_config = speechsdk.audio.AudioOutputConfig(filename=output_file)
