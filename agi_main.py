@@ -7,7 +7,6 @@ This script is invoked by Asterisk via AGI and uses file-based audio I/O.
 import os
 import re
 import sys
-import spacy
 from asterisk.agi import AGI
 
 # Import your existing modules
@@ -15,20 +14,10 @@ from src.ai import llm_client
 from src.data import data_fetcher
 from src.utils import logger
 
-# Load spaCy English model
-nlp = spacy.load("en_core_web_sm")
-
-
 def extract_order_number(text):
     """
-    Extracts order numbers from user input using NLP and regex.
+    Extracts order numbers from user input using regex.
     """
-    doc = nlp(text)
-    # Try extracting numbers using NLP
-    for ent in doc.ents:
-        if ent.label_ == "CARDINAL":
-            if any(token.text.lower() in ["order", "id", "number"] for token in ent.root.head.lefts):
-                return ent.text
 
     # Fallback: Use regex
     pattern = r'\b(?:order(?:\s*(?:id|number))?|id|number)?\s*(?:is|was|should be|supposed to be)?\s*[:#]?\s*(\d{3,10})'
