@@ -54,7 +54,7 @@ def agi_main_flow_custom(agi):
         input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
         
         agi.verbose("About to record caller input", level=1)
-        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=2)
+        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=5)
         time.sleep(2)
         if os.path.exists(input_wav):
             agi.verbose(f"Recording file exists: {input_wav}", level=1)
