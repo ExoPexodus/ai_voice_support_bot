@@ -48,7 +48,9 @@ def agi_main_flow_custom(agi):
                      "Keep in mind that you'll be in a call with the customer so Make sure you have a very nice and gentle tone when dealing with the customer"
                      "also make sure to give very short and very concise and to the point answers"
                      "don't use any special caracters or emojis or any brackets to express any additional emotions or actions"
-                     "Don't use any bullet points, numbers either, give your answer in a single line every time(you can make it 2 lines at most if needed)")
+                     "Don't use any bullet points, numbers either, give your answer in a single line every time(you can make it 2 lines at most if needed)"
+                     "You're only allowed to answer stuff related to zomato and customer service, anything outside of this scope shall be avoided at all cost"
+                     "Lastly, for context regarding orders, you can not make up random order numbers, only order details given to you along with the user input as context is what you're allowed to use")
     conversation_history = [{"role": "system", "content": system_prompt}]
     exit_keywords = ["bye", "exit", "quit", "end call", "goodbye", "thank you", "that's all"]
     
