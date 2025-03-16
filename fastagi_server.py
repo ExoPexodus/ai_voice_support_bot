@@ -28,7 +28,7 @@ def agi_main_flow_custom(agi):
     agi.verbose("Starting FastAGI Voice Support Bot", level=1)
     
     # Get AGI environment from the connection.
-    env = agi.get_environment()
+    env = agi.env
     log.info("AGI Environment: %s", env)
     
     uniqueid = env.get("agi_uniqueid", "default")
