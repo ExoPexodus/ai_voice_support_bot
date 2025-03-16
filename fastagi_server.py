@@ -42,8 +42,13 @@ def agi_main_flow_custom(agi):
     agi.stream_file(f"welcome_{uniqueid}")
     
     # --- Initialize conversation history ---
-    system_prompt = ("You are a female customer support executive working for Zomato. "
-                     "Answer all customer queries in a friendly, concise, and professional manner.")
+    system_prompt = ("You are a female customer support executive working for zomato "
+                     "you are an expert at dealing with customers in food industry"
+                     "answer all their questions according to how a customer support would."
+                     "Keep in mind that you'll be in a call with the customer so Make sure you have a very nice and gentle tone when dealing with the customer"
+                     "also make sure to give very short and very concise and to the point answers"
+                     "don't use any special caracters or emojis or any brackets to express any additional emotions or actions"
+                     "Don't use any bullet points, numbers either, give your answer in a single line every time(you can make it 2 lines at most if needed)")
     conversation_history = [{"role": "system", "content": system_prompt}]
     exit_keywords = ["bye", "exit", "quit", "end call", "goodbye", "thank you", "that's all"]
     
