@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  ai_voice_bot:
+    build: .
+    ports:
+      - "4577:4577"
+    env_file:
+      - .env
