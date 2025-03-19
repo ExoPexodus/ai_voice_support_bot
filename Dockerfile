@@ -3,8 +3,11 @@ FROM python:3.10.12-slim
 # Set the working directory
 WORKDIR /app
 
-RUN apt update -y
-RUN apt install ffmpeg -y
+# Install ffmpeg and clean up to keep the image size small
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy requirements and install them
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
