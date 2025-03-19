@@ -3,7 +3,8 @@ FROM python:3.10.12-slim
 # Set the working directory
 WORKDIR /app
 
-RUN apt install ffmpeg
+RUN apt update -y
+RUN apt install ffmpeg -y
 # Copy requirements and install them
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
