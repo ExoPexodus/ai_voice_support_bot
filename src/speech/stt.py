@@ -1,3 +1,4 @@
+# src/speech/stt.py
 import azure.cognitiveservices.speech as speechsdk
 from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, AZURE_STT_LANGUAGE
 
