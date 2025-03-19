@@ -20,139 +20,105 @@ from src.ai import llm_client  # Azure LLM client
 # -------------------------------------------------------------------------
 # AI Helper Functions
 # -------------------------------------------------------------------------
-def analyze_sentiment(response):
+def determine_sentiment(response):
     """
-    Uses AI to determine if the response sentiment is positive, negative, or neutral.
+    Uses the LLM to decide if the candidate's response to a yes/no question is positive or negative.
+    Returns "positive" or "negative".
     """
-    prompt = f"Determine the sentiment (positive, negative, or neutral) of the following response: \"{response}\"."
+    prompt = f"Determine whether the following response is positive or negative: \"{response}\". Respond with only 'positive' or 'negative'."
     conversation = [{"role": "system", "content": prompt}]
     result = llm_client.query_llm(conversation).strip().lower()
-    if "positive" in result:
-        return "positive"
-    elif "negative" in result:
+    if "negative" in result:
         return "negative"
-    else:
-        return "neutral"
+    return "positive"
 
-def is_followup_question(response):
+def validate_option(response, valid_options):
     """
-    Uses AI to check if the candidate's response is actually a follow-up or clarification question.
-    Returns True if the answer appears to be a question.
-    """
-    prompt = f"Is the following response a follow-up clarification question? Answer yes or no: \"{response}\"."
-    conversation = [{"role": "system", "content": prompt}]
-    result = llm_client.query_llm(conversation).strip().lower()
-    return "yes" in result
-
-def validate_answer(response, valid_options):
-    """
-    Uses AI to check if the candidate's response clearly indicates one of the valid options.
-    If it does, returns that option (in lowercase); otherwise, returns None.
+    Uses the LLM to determine if the candidate's response clearly indicates one of the valid options.
+    If it does, returns that option (in lowercase), otherwise returns None.
     """
     options_str = ", ".join(valid_options)
     prompt = (f"Given the candidate's response: \"{response}\", does it clearly indicate one of the following options: {options_str}? "
-              "If yes, return the matched option exactly as one of the options; if not, return 'none'.")
+              "If yes, return the matching option exactly as one of these; if not, return 'none'.")
     conversation = [{"role": "system", "content": prompt}]
     result = llm_client.query_llm(conversation).strip().lower()
     return result if result in valid_options else None
 
-# -------------------------------------------------------------------------
-# Conversational Question Loop
-# -------------------------------------------------------------------------
-def ask_question_with_ai(agi, q, uniqueid):
+def generate_clarification(valid_options):
     """
-    Asks a question using TTS and records the candidate's answer.
-    Uses separate AI functions to check:
-      - if the candidate's response has the expected sentiment,
-      - if the candidate's answer is a follow-up question,
-      - and if the candidate's answer is valid as per provided options.
+    Uses the LLM to generate a short clarification prompt that tells the candidate which options are allowed.
+    """
+    options_str = ", ".join(valid_options)
+    prompt = f"Please answer with one of the following options only: {options_str}."
+    conversation = [{"role": "system", "content": prompt}]
+    clarification = llm_client.query_llm(conversation).strip()
+    return clarification
+
+# -------------------------------------------------------------------------
+# Conversational Question Function
+# -------------------------------------------------------------------------
+def ask_question(agi, question_data, uniqueid):
+    """
+    Asks a single question using TTS and records the candidate's answer.
+    For yes/no questions (detected by valid_options ["yes", "no"]), the function uses sentiment analysis.
+    For other questions, it validates the answer against valid_options.
     
-    q: dict with keys:
-         key: identifier for the question
-         question: text to ask
-         valid_options: list of valid (lowercase) options
-         exit_if (optional): if answer matches this, exit the conversation
-         exit_message (optional): message to play if exiting early.
-         condition (optional): lambda to decide if question should be asked.
+    question_data: dict with keys:
+       - key: identifier for the question
+       - question: text to ask
+       - valid_options: list of valid answers (all in lowercase)
+       - exit_if (optional): if answer equals this, end conversation
+       - exit_message (optional): message if exiting early
+    Returns the validated answer (in lowercase) if successful, or None if conversation ended.
     """
-    valid_options = [opt.lower() for opt in q["valid_options"]]
+    valid_options = [opt.lower() for opt in question_data["valid_options"]]
     
     while True:
-        # Play the main question prompt.
-        prompt = q["question"]
-        wav_file = f"/var/lib/asterisk/sounds/{q['key']}_{uniqueid}.wav"
+        # Play the question prompt.
+        prompt = question_data["question"]
+        wav_file = f"/var/lib/asterisk/sounds/{question_data['key']}_{uniqueid}.wav"
         tts.generate_tts_file(prompt, wav_file)
         agi.verbose(f"Playing prompt: {prompt}", level=1)
-        agi.stream_file(f"{q['key']}_{uniqueid}")
+        agi.stream_file(f"{question_data['key']}_{uniqueid}")
         
         # Record candidate's response.
-        input_filename = f"input_{q['key']}_{uniqueid}"
+        input_filename = f"input_{question_data['key']}_{uniqueid}"
         input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
         agi.verbose("Recording candidate input...", level=1)
         agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=5)
         time.sleep(2)
         if not os.path.exists(input_wav):
             agi.verbose(f"Recording file NOT found: {input_wav}", level=1)
-        answer = stt.recognize_from_file(input_wav)
-        answer = answer.strip().lower() if answer else ""
-        agi.verbose(f"Candidate said: {answer}", level=1)
+        response = stt.recognize_from_file(input_wav)
+        response = response.strip().lower() if response else ""
+        agi.verbose(f"Candidate said: {response}", level=1)
         
-        # If no answer, exit.
-        if answer == "":
+        if response == "":
             goodbye = "No input received. Ending session. Goodbye!"
             goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
             tts.generate_tts_file(goodbye, goodbye_wav)
             agi.stream_file(f"goodbye_{uniqueid}")
             agi.hangup()
             return None
-
-        # For confirmation questions, use sentiment analysis.
-        if q["key"] == "confirmation":
-            sentiment = analyze_sentiment(answer)
+        
+        # For yes/no questions.
+        if valid_options == ["yes", "no"]:
+            sentiment = determine_sentiment(response)
             if sentiment == "negative":
-                goodbye = q.get("exit_message", "Thank you for your time. Goodbye!")
+                goodbye = question_data.get("exit_message", "Thank you for your time. Goodbye!")
                 goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
                 tts.generate_tts_file(goodbye, goodbye_wav)
                 agi.stream_file(f"goodbye_{uniqueid}")
                 agi.hangup()
                 return None
-
-        # Check if the candidate's response is a follow-up question.
-        if is_followup_question(answer):
-            # Create a composite answer by appending the main question.
-            composite_answer = answer + " " + prompt
-            agi.verbose(f"Detected follow-up. Composite answer: {composite_answer}", level=1)
-            # Validate the composite answer.
-            validated = validate_answer(composite_answer, valid_options)
-            if validated is not None:
-                # If the answer triggers exit.
-                if "exit_if" in q and validated == q["exit_if"].lower():
-                    goodbye = q.get("exit_message", "Thank you for your time. Goodbye!")
-                    goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
-                    tts.generate_tts_file(goodbye, goodbye_wav)
-                    agi.stream_file(f"goodbye_{uniqueid}")
-                    agi.hangup()
-                    return None
-                return validated
-            # If still ambiguous, generate a clarification prompt using the composite answer.
-            conv_history = [
-                {"role": "system", "content": "You are a friendly voice bot helping candidates select one of the valid options."},
-                {"role": "user", "content": composite_answer},
-                {"role": "assistant", "content": f"The valid options are: {', '.join(valid_options)}. Please choose one of these options."}
-            ]
-            clarification = llm_client.query_llm(conv_history).strip()
-            clar_wav = f"/var/lib/asterisk/sounds/clarify_{q['key']}_{uniqueid}.wav"
-            tts.generate_tts_file(clarification, clar_wav)
-            agi.verbose(f"Playing clarification prompt: {clarification}", level=1)
-            agi.stream_file(f"clarify_{q['key']}_{uniqueid}")
-            continue  # Loop back to re-ask using composite context.
+            # If positive, we consider the answer valid.
+            return "yes"
         
-        # Validate the answer against valid options.
-        validated = validate_answer(answer, valid_options)
+        # For non-yes/no questions, validate the candidate's answer.
+        validated = validate_option(response, valid_options)
         if validated is not None:
-            # If the answer triggers exit.
-            if "exit_if" in q and validated == q["exit_if"].lower():
-                goodbye = q.get("exit_message", "Thank you for your time. Goodbye!")
+            if "exit_if" in question_data and validated == question_data["exit_if"].lower():
+                goodbye = question_data.get("exit_message", "Thank you for your time. Goodbye!")
                 goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
                 tts.generate_tts_file(goodbye, goodbye_wav)
                 agi.stream_file(f"goodbye_{uniqueid}")
@@ -160,25 +126,23 @@ def ask_question_with_ai(agi, q, uniqueid):
                 return None
             return validated
         
-        # If still ambiguous, generate a clarifying prompt.
-        conv_history = [
-            {"role": "system", "content": "You are a friendly voice bot helping candidates select one of the valid options."},
-            {"role": "user", "content": answer},
-            {"role": "assistant", "content": f"The valid options are: {', '.join(valid_options)}. Please choose one of these options."}
-        ]
-        clarification = llm_client.query_llm(conv_history).strip()
-        clar_wav = f"/var/lib/asterisk/sounds/clarify_{q['key']}_{uniqueid}.wav"
-        tts.generate_tts_file(clarification, clar_wav)
-        agi.verbose(f"Playing clarification prompt: {clarification}", level=1)
-        agi.stream_file(f"clarify_{q['key']}_{uniqueid}")
-        # Loop back to re-ask.
-        
+        # If the answer is ambiguous, generate a clarification prompt that includes the valid options.
+        clarification = generate_clarification(valid_options)
+        full_clarification = f"I didn't quite catch that. {clarification}"
+        clar_wav = f"/var/lib/asterisk/sounds/clarify_{question_data['key']}_{uniqueid}.wav"
+        tts.generate_tts_file(full_clarification, clar_wav)
+        agi.verbose(f"Playing clarification prompt: {full_clarification}", level=1)
+        agi.stream_file(f"clarify_{question_data['key']}_{uniqueid}")
+        # Loop back and re-ask the question.
+
 # -------------------------------------------------------------------------
 # Main Conversational Flow
 # -------------------------------------------------------------------------
 def agi_main_flow_custom(agi):
     """
-    Main flow for the Hiring Voice Bot using AI-powered functions.
+    Main flow for the Hiring Voice Bot.
+    Asks a series of questions, uses AI to decide if the candidate's responses are positive
+    and whether they match the valid options. Ends the conversation if the response is negative.
     """
     log = logger.setup_logger()
     agi.verbose("Starting FastAGI Hiring Voice Bot", level=1)
@@ -190,7 +154,7 @@ def agi_main_flow_custom(agi):
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
     
-    # Define questions with expected valid options.
+    # Define our questions.
     questions = [
         {
             "key": "confirmation",
@@ -206,7 +170,7 @@ def agi_main_flow_custom(agi):
         },
         {
             "key": "diploma",
-            "question": "Since you answered 10th, do you have a 3-year diploma? Answer yes or no.",
+            "question": "Since you said 10th, do you have a 3-year diploma? Answer yes or no.",
             "valid_options": ["yes", "no"],
             "condition": lambda responses: responses.get("qualification", "") == "10th"
         },
@@ -236,18 +200,18 @@ def agi_main_flow_custom(agi):
     
     candidate_details = {}
     
-    # Iterate through the questions.
+    # Loop through each question.
     for q in questions:
-        # Skip question if a condition is specified and not met.
+        # Check for condition: if a question should be skipped.
         if "condition" in q and not q["condition"](candidate_details):
             continue
-        answer = ask_question_with_ai(agi, q, uniqueid)
+        answer = ask_question(agi, q, uniqueid)
         if answer is None:
             return  # Conversation ended early.
         candidate_details[q["key"]] = answer
         agi.verbose(f"Recorded {q['key']}: {answer}", level=1)
     
-    # Finalize conversation.
+    # Final message.
     final_message = (f"Fantastic, {candidate_name}! That's all we need for now. "
                      f"Thank you for your time. Our team at {company_name} will review your details and reach out soon. Have a great day!")
     final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
