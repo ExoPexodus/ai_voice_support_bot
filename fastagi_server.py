@@ -70,12 +70,26 @@ def generate_smart_clarification(primary_question, candidate_followup, valid_opt
     return clean_llm_response(raw_response)
 
 def is_followup_question(response, valid_options):
-    prompt = (f"Is the following response a follow-up clarification question? Answer yes or no: \"{response}\". "
-              f"Also, if the response includes one of these options: {valid_options} and does not feel like they are asking for more details about the options, then just answer no.")
+    """
+    Uses the LLM to decide if the candidate's response is a follow-up clarification question rather than a direct answer.
+    
+    The prompt instructs the LLM to consider that if the candidate is asking for more details and not providing one
+    of the valid options, it should answer 'yes'. Otherwise, if the response clearly includes one of the valid options,
+    the answer should be 'no'. Respond with only 'yes' or 'no'.
+    """
+    options_str = ", ".join(valid_options)
+    prompt = (
+        f"Candidate's response: \"{response}\".\n"
+        "Determine if this response is a follow-up clarification question (i.e., the candidate is asking for more details) "
+        "rather than directly answering the primary question. "
+        f"If the response is asking for clarification and does not include any of these valid options: {options_str}, respond with 'yes'. "
+        "Otherwise, respond with 'no'. "
+        "Respond with only 'yes' or 'no'."
+    )
     conversation = [{"role": "system", "content": prompt}]
     raw_result = llm_client.query_llm(conversation)
-    result = clean_llm_response(raw_result).lower()
-    return "yes" in result
+    result = clean_llm_response(raw_result).strip().lower()
+    return result == "yes"
 
 # -------------------------------------------------------------------------
 # Conversational Question Function
