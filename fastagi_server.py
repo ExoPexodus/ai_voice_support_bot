@@ -74,7 +74,7 @@ def generate_smart_clarification(primary_question, candidate_followup, valid_opt
     options_str = ", ".join(valid_options)
     prompt = (f"The candidate asked: \"{candidate_followup}\". The primary question is: \"{primary_question}\". "
               f"Provide a smart, friendly response that acknowledges their follow-up and instructs them to answer the primary question by choosing one of the following options: {options_str}. "
-              "Do not repeat the entire primary question verbatim; just provide a concise clarification and directive.")
+              "Do not repeat the entire primary question verbatim; just provide a concise clarification and directive. Do Not use any Emojis and make sure your answer is small and concise")
     conversation = [{"role": "system", "content": prompt}]
     raw_response = llm_client.query_llm(conversation)
     return clean_llm_response(raw_response)
@@ -206,7 +206,7 @@ def agi_main_flow_custom(agi):
     questions = [
         {
             "key": "confirmation",
-            "question": f"Hello {candidate_name}, this is {company_name} calling. Are you still interested in joining our team? Answer yes or no.",
+            "question": f"Hello {candidate_name}, this is {company_name} calling. Are you still interested in joining our team?",
             "valid_options": ["yes", "no"],
             "exit_if": "no",
             "exit_message": "Thank you for your time. Have a great day!"
