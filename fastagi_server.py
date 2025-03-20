@@ -73,18 +73,20 @@ def generate_smart_clarification(primary_question, candidate_followup, valid_opt
     """
     options_str = ", ".join(valid_options)
     prompt = (f"The candidate asked: \"{candidate_followup}\". The primary question is: \"{primary_question}\". "
-              f"Provide a smart, friendly response that acknowledges their follow-up and instructs them to answer the primary question by choosing one of the following options: {options_str}. "
+              f"Provide a smart, friendly response that acknowledges their follow-up and instructs them to answer the main question by choosing one of the following options: {options_str}. "
               "Do not repeat the entire primary question verbatim; just provide a concise clarification and directive. Do Not use any Emojis and make sure your answer is small and concise")
     conversation = [{"role": "system", "content": prompt}]
     raw_response = llm_client.query_llm(conversation)
     return clean_llm_response(raw_response)
 
-def is_followup_question(response):
+def is_followup_question(response, valid_options):
     """
     Uses the LLM to check if the candidate's response is actually a follow-up clarification question.
     Returns True if it appears to be a question.
     """
-    prompt = f"Is the following response a follow-up clarification question? Answer yes or no: \"{response}\"."
+    prompt = (f"Is the following response a follow-up clarification question? Does the response include Answer yes or no: \"{response}\"."
+              f"Also, if the response inlcudes one of these options:{valid_options}"
+              "and does not feel like they are asking more details about the options then just answer no.")
     conversation = [{"role": "system", "content": prompt}]
     raw_result = llm_client.query_llm(conversation)
     result = clean_llm_response(raw_result).lower()
@@ -157,7 +159,7 @@ def ask_question(agi, question_data, uniqueid):
             return "yes"
         
         # If not already in clarification mode, check if the candidate's response is a follow-up question.
-        if not clarification_mode and is_followup_question(response):
+        if not clarification_mode and is_followup_question(response,valid_options):
             smart_prompt = generate_smart_clarification(primary_prompt, response, valid_options)
             agi.verbose(f"Smart clarification generated: {smart_prompt}", level=1)
             clarification_mode = True
