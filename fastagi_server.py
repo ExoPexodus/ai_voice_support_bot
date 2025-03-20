@@ -11,6 +11,7 @@ import logging
 import io
 import time
 import os
+import json
 
 from asterisk.agi import AGI
 from src.utils import logger
@@ -33,10 +34,6 @@ def clean_llm_response(response):
 # AI Helper Functions
 # -------------------------------------------------------------------------
 def determine_sentiment(response):
-    """
-    Uses the LLM to decide if the candidate's response to a yes/no question is positive or negative.
-    Returns "positive" or "negative".
-    """
     prompt = f"Determine whether the following response is positive or negative: \"{response}\". Respond with only 'positive' or 'negative'."
     conversation = [{"role": "system", "content": prompt}]
     raw_result = llm_client.query_llm(conversation)
@@ -44,10 +41,6 @@ def determine_sentiment(response):
     return "negative" if "negative" in result else "positive"
 
 def validate_option(response, valid_options):
-    """
-    Uses the LLM to determine if the candidate's response clearly indicates one of the valid options.
-    Returns that option (in lowercase) if recognized, otherwise returns None.
-    """
     options_str = ", ".join(valid_options)
     prompt = (f"Given the candidate's response: \"{response}\", does it clearly indicate one of the following options: {options_str}? "
               "If yes, return the matching option exactly as one of these; if not, return 'none'.")
@@ -57,9 +50,6 @@ def validate_option(response, valid_options):
     return result if result in valid_options else None
 
 def generate_generic_clarification(valid_options):
-    """
-    Uses the LLM to generate a simple clarification prompt that instructs the candidate to choose one of the valid options.
-    """
     options_str = ", ".join(valid_options)
     prompt = f"Please answer with one of the following options only: {options_str}."
     conversation = [{"role": "system", "content": prompt}]
@@ -67,10 +57,6 @@ def generate_generic_clarification(valid_options):
     return clean_llm_response(raw_clarification)
 
 def generate_smart_clarification(primary_question, candidate_followup, valid_options):
-    """
-    Uses the LLM to generate a smart clarification prompt that acknowledges the candidate's follow-up
-    while guiding them to answer the primary question. It must keep the conversation context.
-    """
     options_str = ", ".join(valid_options)
     prompt = (f"The candidate asked: \"{candidate_followup}\". The primary question is: \"{primary_question}\". "
               f"Provide a smart, friendly response that acknowledges their follow-up and instructs them to answer the main question by choosing one of the following options: {options_str}. "
@@ -80,13 +66,8 @@ def generate_smart_clarification(primary_question, candidate_followup, valid_opt
     return clean_llm_response(raw_response)
 
 def is_followup_question(response, valid_options):
-    """
-    Uses the LLM to check if the candidate's response is actually a follow-up clarification question.
-    Returns True if it appears to be a question.
-    """
-    prompt = (f"Is the following response a follow-up clarification question? Does the response include Answer yes or no: \"{response}\"."
-              f"Also, if the response inlcudes one of these options:{valid_options}"
-              "and does not feel like they are asking more details about the options then just answer no.")
+    prompt = (f"Is the following response a follow-up clarification question? Answer yes or no: \"{response}\". "
+              f"Also, if the response includes one of these options: {valid_options} and does not feel like they are asking for more details about the options, then just answer no.")
     conversation = [{"role": "system", "content": prompt}]
     raw_result = llm_client.query_llm(conversation)
     result = clean_llm_response(raw_result).lower()
@@ -96,37 +77,19 @@ def is_followup_question(response, valid_options):
 # Conversational Question Function
 # -------------------------------------------------------------------------
 def ask_question(agi, question_data, uniqueid):
-    """
-    Asks a single question and handles candidate responses using AI.
-    
-    For yes/no questions (valid_options == ["yes", "no"]), it determines sentiment.
-    For other questions, it validates the answer.
-    
-    If a follow-up question is detected, it uses the entire context to generate a smart clarification prompt
-    that instructs the candidate to answer the primary question. Then it waits for a new answer without repeating
-    the old question.
-    
-    Returns the validated answer (in lowercase) or None if the conversation is terminated.
-    """
     valid_options = [opt.lower() for opt in question_data["valid_options"]]
     primary_prompt = question_data["question"]
     clarification_mode = False
     smart_prompt = ""
     
     while True:
-        # Decide which prompt to play.
-        if clarification_mode:
-            current_prompt = smart_prompt
-        else:
-            current_prompt = primary_prompt
+        current_prompt = smart_prompt if clarification_mode else primary_prompt
         
-        # Play the current prompt.
         wav_file = f"/var/lib/asterisk/sounds/{question_data['key']}_{uniqueid}.wav"
         tts.generate_tts_file(current_prompt, wav_file)
         agi.verbose(f"Playing prompt: {current_prompt}", level=1)
         agi.stream_file(f"{question_data['key']}_{uniqueid}")
         
-        # Record candidate's response.
         input_filename = f"input_{question_data['key']}_{uniqueid}"
         input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
         agi.verbose("Recording candidate input...", level=1)
@@ -146,7 +109,6 @@ def ask_question(agi, question_data, uniqueid):
             agi.hangup()
             return None
         
-        # For yes/no questions.
         if valid_options == ["yes", "no"]:
             sentiment = determine_sentiment(response)
             if sentiment == "negative":
@@ -158,19 +120,16 @@ def ask_question(agi, question_data, uniqueid):
                 return None
             return "yes"
         
-        # If not already in clarification mode, check if the candidate's response is a follow-up question.
-        if not clarification_mode and is_followup_question(response,valid_options):
+        if not clarification_mode and is_followup_question(response, valid_options):
             smart_prompt = generate_smart_clarification(primary_prompt, response, valid_options)
             agi.verbose(f"Smart clarification generated: {smart_prompt}", level=1)
             clarification_mode = True
-            # Instead of re-asking the primary prompt, play the smart clarification and wait for new input.
             continue
         
-        # Validate the candidate's answer.
         validated = validate_option(response, valid_options)
         if validated is not None:
             if "exit_if" in question_data and validated == question_data["exit_if"].lower():
-                goodbye = question_data.get("exit_message", "i see, Thank you so much for your time. Goodbye!")
+                goodbye = question_data.get("exit_message", "Thank you for your time. Goodbye!")
                 goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
                 tts.generate_tts_file(goodbye, goodbye_wav)
                 agi.stream_file(f"goodbye_{uniqueid}")
@@ -178,23 +137,29 @@ def ask_question(agi, question_data, uniqueid):
                 return None
             return validated
         
-        # If the answer is ambiguous, generate a generic clarification prompt.
         smart_prompt = generate_smart_clarification(primary_prompt, response, valid_options)
         agi.verbose(f"Ambiguous answer. Smart clarification generated: {smart_prompt}", level=1)
         clarification_mode = True
-        # Loop back and wait for a new answer using the smart clarification.
         continue
+
+# -------------------------------------------------------------------------
+# Function to Save Candidate Details to JSON
+# -------------------------------------------------------------------------
+def save_candidate_details(candidate_details, uniqueid):
+    """
+    Saves candidate details to a JSON file.
+    """
+    data_dir = "./candidate_data"
+    os.makedirs(data_dir, exist_ok=True)
+    filename = os.path.join(data_dir, f"candidate_{uniqueid}.json")
+    with open(filename, "w") as f:
+        json.dump(candidate_details, f, indent=4)
+    return filename
 
 # -------------------------------------------------------------------------
 # Main Conversational Flow
 # -------------------------------------------------------------------------
 def agi_main_flow_custom(agi):
-    """
-    Main flow for the Hiring Voice Bot.
-    Asks a series of predefined questions and uses AI helper functions to determine if the candidate's responses
-    are positive and meet the valid options. If a candidate provides a follow-up question, a smart clarification prompt
-    is generated (with full conversation context) and the bot waits for a new answer.
-    """
     log = logger.setup_logger()
     agi.verbose("Starting FastAGI Hiring Voice Bot", level=1)
     
@@ -205,30 +170,28 @@ def agi_main_flow_custom(agi):
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
     
-    candidate_name = "Ravinder"
-    
     questions = [
         {
             "key": "confirmation",
-            "question": f"Hi {candidate_name}! this is {company_name} calling. Hope you're doing well! We're excited to chat with you about an opportunity you might really dig. Before we dive in, can I just confirm—are you still interested in joining our team? Your interest means a lot to us!",
+            "question": f"Hi {candidate_name}! This is {company_name} calling. Hope you're doing well! We're excited to chat with you about an opportunity you might really dig. Before we dive in, can I just confirm—are you still interested in joining our team? Your interest means a lot to us!",
             "valid_options": ["yes", "no"],
             "exit_if": "no",
-            "exit_message": "I understand, Thank you so much for your time. Hope you have nice day!"
+            "exit_message": "I understand, thank you so much for your time. Hope you have a nice day!"
         },
         {
             "key": "qualification",
-            "question": "Great, thanks for confirming! Let’s keep things moving. First off, could you tell me what your highest qualification is? Whether it’s 10th, Post-graduate, Graduate, or 12th, just let me know",
+            "question": "Great, thanks for confirming! Let’s keep things moving. First off, could you tell me what your highest qualification is? Whether it’s 10th, Post-graduate, Graduate, or 12th, just let me know.",
             "valid_options": ["10th", "post-graduate", "graduate", "12th"]
         },
         {
             "key": "diploma",
-            "question": "I see, by any chance, do you also have a 3-year diploma along with it?",
+            "question": "I see. By any chance, do you also have a 3-year diploma along with it?",
             "valid_options": ["yes", "no"],
             "condition": lambda responses: responses.get("qualification", "") == "10th"
         },
         {
             "key": "job_type",
-            "question": "Perfect, that really helps. Next up, are you considering a full-time role or would a part-time position suit you better? Feel free to share what’s right for you.",
+            "question": "Perfect, that really helps. Next up, are you considering a full-time role, a part-time position, or a freelance/gig arrangement? Please answer accordingly.",
             "valid_options": ["permanent", "full time", "part-time", "freelance", "gig"]
         },
         {
@@ -246,7 +209,7 @@ def agi_main_flow_custom(agi):
             "question": "Thanks, that’s very helpful. Lastly, before we wrap up—do we have your permission to share all this information with our internal team so they can follow up with you? Your consent is important to us.",
             "valid_options": ["yes", "no"],
             "exit_if": "no",
-            "exit_message": "I understand, Thank you so much for your time. We respect your decision and will not share your details. Have an amazing day!"
+            "exit_message": "I understand, thank you so much for your time. We respect your decision and will not share your details. Have an amazing day!"
         }
     ]
     
@@ -260,6 +223,11 @@ def agi_main_flow_custom(agi):
             return  # Conversation ended early.
         candidate_details[q["key"]] = answer
         agi.verbose(f"Recorded {q['key']}: {answer}", level=1)
+    
+    # Save candidate details only if consent was given.
+    if candidate_details.get("consent") == "yes":
+        filename = save_candidate_details(candidate_details, uniqueid)
+        agi.verbose(f"Candidate details saved to {filename}", level=1)
     
     final_message = (f"Fantastic, {candidate_name}! That's all we need for now. "
                      f"Thank you for your time. Our team at {company_name} will review your details and reach out soon. Have a great day!")
