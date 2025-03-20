@@ -19,12 +19,14 @@ from src.utils import logger
 from src.speech import tts, stt
 from src.ai import llm_client  # Azure LLM client
 from src.dialogue_manager import DialogueManager
+from src.config import MONGO_URI
 
 # --- MongoDB and AMI Integration ---
 from pymongo import MongoClient
 from asterisk.manager import Manager  # Ensure you have a suitable asterisk.manager module installed
+from dotenv import load_dotenv
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+
 
 def fetch_candidates():
     """Fetch candidates from the 'hra' database in the 'users' collection."""
