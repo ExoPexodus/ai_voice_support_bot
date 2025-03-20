@@ -44,7 +44,7 @@ def initiate_outgoing_call(candidate):
         manager = Manager()
         manager.connect("localhost")
         # Use your AMI username and password here.
-        manager.login("manager", "secret")
+        manager.login("agiuser", "asgfaksdgja23123127ygu12uh3ixjk213i21ix3n21")
         action = {
             "Action": "Originate",
             "Channel": f"PJSIP/{candidate['phone']}",
