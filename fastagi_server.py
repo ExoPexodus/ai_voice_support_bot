@@ -186,7 +186,7 @@ if __name__ == "__main__":
         try:
             manager = Manager()
             manager.connect("localhost")
-            manager.login("manager", "secret")
+            manager.login("agiuser", "asgfaksdgja23123127ygu12uh3ixjk213i21ix3n21")
             action = {
                 "Action": "Originate",
                 "Channel": f"PJSIP/{candidate['phone']}",
@@ -205,7 +205,7 @@ if __name__ == "__main__":
             return None
 
     def fetch_candidates():
-        client = MongoClient("mongodb://localhost:27017/")
+        client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
         db = client["hra"]
         users_collection = db["users"]
         candidates = list(users_collection.find({"hasVerified": False, "IsActive": True}))
