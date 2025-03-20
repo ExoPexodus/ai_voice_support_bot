@@ -12,184 +12,43 @@ import io
 import time
 import os
 import json
+import asyncio
 
 from asterisk.agi import AGI
 from src.utils import logger
 from src.speech import tts, stt
 from src.ai import llm_client  # Azure LLM client
+from dialogue_manager import DialogueManager  # Our custom async dialogue manager
 
-# -------------------------------------------------------------------------
-# LLM Response Cleaner
-# -------------------------------------------------------------------------
-def clean_llm_response(response):
-    """
-    Removes unwanted formatting tokens from the LLM response.
-    If response is None, returns an empty string.
-    """
-    if response is None:
-        return ""
-    tokens = ["<|im_start|>user<|im_sep|>", "<|im_start|>assistant<|im_sep|>", "<|im_end|>"]
-    for token in tokens:
-        response = response.replace(token, "")
-    return response.strip()
+# Synchronous wrapper for async dialogue processing.
+def run_async_dialogue(agi, dm):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        final_action = loop.run_until_complete(dm.run_conversation(agi))
+    finally:
+        loop.close()
+    return final_action
 
-
-# -------------------------------------------------------------------------
-# AI Helper Functions
-# -------------------------------------------------------------------------
-def determine_sentiment(response):
-    prompt = f"Determine whether the following response is positive or negative: \"{response}\". Respond with only 'positive' or 'negative'."
-    conversation = [{"role": "system", "content": prompt}]
-    raw_result = llm_client.query_llm(conversation)
-    result = clean_llm_response(raw_result).lower()
-    return "negative" if "negative" in result else "positive"
-
-def validate_option(response, valid_options):
-    options_str = ", ".join(valid_options)
-    prompt = (f"Given the candidate's response: \"{response}\", does it clearly indicate one of the following options: {options_str}? "
-              "If yes, return the matching option exactly as one of these; if not, return 'none'.")
-    conversation = [{"role": "system", "content": prompt}]
-    raw_result = llm_client.query_llm(conversation)
-    result = clean_llm_response(raw_result).lower()
-    return result if result in valid_options else None
-
-def generate_generic_clarification(valid_options):
-    options_str = ", ".join(valid_options)
-    prompt = f"Please answer with one of the following options only: {options_str}."
-    conversation = [{"role": "system", "content": prompt}]
-    raw_clarification = llm_client.query_llm(conversation)
-    return clean_llm_response(raw_clarification)
-
-def generate_smart_clarification(primary_question, candidate_followup, valid_options):
-    options_str = ", ".join(valid_options)
-    prompt = (f"The candidate asked: \"{candidate_followup}\". The primary question is: \"{primary_question}\". "
-              f"Provide a smart, friendly response that acknowledges their follow-up and instructs them to answer the main question by choosing one of the following options: {options_str}. "
-              "Do not repeat the entire primary question verbatim; just provide a concise clarification and directive. Do Not use any Emojis and make sure your answer is small and concise")
-    conversation = [{"role": "system", "content": prompt}]
-    raw_response = llm_client.query_llm(conversation)
-    return clean_llm_response(raw_response)
-
-def is_followup_question(response, valid_options):
-    """
-    Uses the LLM to decide if the candidate's response is a follow-up clarification question rather than a direct answer.
-    
-    The prompt instructs the LLM to consider that if the candidate is asking for more details and not providing one
-    of the valid options, it should answer 'yes'. Otherwise, if the response clearly includes one of the valid options,
-    the answer should be 'no'. Respond with only 'yes' or 'no'.
-    """
-    options_str = ", ".join(valid_options)
-    prompt = (
-        f"Candidate's response: \"{response}\".\n"
-        "Determine if this response is a follow-up clarification question (i.e., the candidate is asking for more details) "
-        "rather than directly answering the primary question. "
-        f"If the response is asking for clarification and does not include any of these valid options: {options_str}, respond with 'yes'. "
-        "Otherwise, respond with 'no'. "
-        "Respond with only 'yes' or 'no'."
-    )
-    conversation = [{"role": "system", "content": prompt}]
-    raw_result = llm_client.query_llm(conversation)
-    result = clean_llm_response(raw_result).strip().lower()
-    return result == "yes"
-
-# -------------------------------------------------------------------------
-# Conversational Question Function
-# -------------------------------------------------------------------------
-def ask_question(agi, question_data, uniqueid):
-    valid_options = [opt.lower() for opt in question_data["valid_options"]]
-    primary_prompt = question_data["question"]
-    clarification_mode = False
-    smart_prompt = ""
-    
-    while True:
-        current_prompt = smart_prompt if clarification_mode else primary_prompt
-        
-        wav_file = f"/var/lib/asterisk/sounds/{question_data['key']}_{uniqueid}.wav"
-        tts.generate_tts_file(current_prompt, wav_file)
-        agi.verbose(f"Playing prompt: {current_prompt}", level=1)
-        agi.stream_file(f"{question_data['key']}_{uniqueid}")
-        
-        input_filename = f"input_{question_data['key']}_{uniqueid}"
-        input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
-        agi.verbose("Recording candidate input...", level=1)
-        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="beep", silence=5)
-        time.sleep(2)
-        if not os.path.exists(input_wav):
-            agi.verbose(f"Recording file NOT found: {input_wav}", level=1)
-        response = stt.recognize_from_file(input_wav)
-        response = response.strip().lower() if response else ""
-        agi.verbose(f"Candidate said: {response}", level=1)
-        
-        if response == "":
-            goodbye = "No input received. Ending session. Goodbye!"
-            goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
-            tts.generate_tts_file(goodbye, goodbye_wav)
-            agi.stream_file(f"goodbye_{uniqueid}")
-            agi.hangup()
-            return None
-        
-        if valid_options == ["yes", "no"]:
-            sentiment = determine_sentiment(response)
-            if sentiment == "negative":
-                goodbye = question_data.get("exit_message", "Thank you for your time. Goodbye!")
-                goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
-                tts.generate_tts_file(goodbye, goodbye_wav)
-                agi.stream_file(f"goodbye_{uniqueid}")
-                agi.hangup()
-                return None
-            return "yes"
-        
-        if not clarification_mode and is_followup_question(response, valid_options):
-            smart_prompt = generate_smart_clarification(primary_prompt, response, valid_options)
-            agi.verbose(f"Smart clarification generated: {smart_prompt}", level=1)
-            clarification_mode = True
-            continue
-        
-        validated = validate_option(response, valid_options)
-        if validated is not None:
-            if "exit_if" in question_data and validated == question_data["exit_if"].lower():
-                goodbye = question_data.get("exit_message", "Thank you for your time. Goodbye!")
-                goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
-                tts.generate_tts_file(goodbye, goodbye_wav)
-                agi.stream_file(f"goodbye_{uniqueid}")
-                agi.hangup()
-                return None
-            return validated
-        
-        smart_prompt = generate_smart_clarification(primary_prompt, response, valid_options)
-        agi.verbose(f"Ambiguous answer. Smart clarification generated: {smart_prompt}", level=1)
-        clarification_mode = True
-        continue
-
-# -------------------------------------------------------------------------
-# Function to Save Candidate Details to JSON
-# -------------------------------------------------------------------------
 def save_candidate_details(candidate_details, uniqueid):
-    """
-    Saves candidate details to a JSON file.
-    """
-    data_dir = "./candidate_data"
+    data_dir = "/var/lib/asterisk/candidate_data"
     os.makedirs(data_dir, exist_ok=True)
     filename = os.path.join(data_dir, f"candidate_{uniqueid}.json")
     with open(filename, "w") as f:
         json.dump(candidate_details, f, indent=4)
     return filename
 
-# -------------------------------------------------------------------------
-# Main Conversational Flow
-# -------------------------------------------------------------------------
 def agi_main_flow_custom(agi):
     log = logger.setup_logger()
     agi.verbose("Starting FastAGI Hiring Voice Bot", level=1)
-    
+
     env = agi.env
     log.info("AGI Environment: %s", env)
     uniqueid = env.get("agi_uniqueid", "default")
-    
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
-    
-    candidate_name = "Jatin"
-    
+
+    # Define your conversation questions.
     questions = [
         {
             "key": "confirmation",
@@ -216,8 +75,8 @@ def agi_main_flow_custom(agi):
         },
         {
             "key": "location",
-            "question": "Awesome. Now, what’s your preferred location for work? We're currently offering positions in Amritsar, Vadodara, Kolkata, Banglore, Gurugram, and Pune.",
-            "valid_options": ["amritsar", "vadodara", "kolkata", "banglore", "gurugram", "pune"]
+            "question": "Awesome. Now, what’s your preferred location for work? We're currently offering positions in Amritsar, Vadodara, Kolkata, Bangalore, Gurugram, and Pune.",
+            "valid_options": ["amritsar", "vadodara", "kolkata", "bangalore", "gurugram", "pune"]
         },
         {
             "key": "interview_mode",
@@ -232,30 +91,25 @@ def agi_main_flow_custom(agi):
             "exit_message": "I understand, thank you so much for your time. We respect your decision and will not share your details. Have an amazing day!"
         }
     ]
-    
-    candidate_details = {}
-    
-    for q in questions:
-        if "condition" in q and not q["condition"](candidate_details):
-            continue
-        answer = ask_question(agi, q, uniqueid)
-        if answer is None:
-            return  # Conversation ended early.
-        candidate_details[q["key"]] = answer
-        agi.verbose(f"Recorded {q['key']}: {answer}", level=1)
-    
-    # Save candidate details only if consent was given.
-    if candidate_details.get("consent") == "yes":
-        filename = save_candidate_details(candidate_details, uniqueid)
+
+    # Initialize the dialogue manager with the questions.
+    dm = DialogueManager(questions, candidate_name, company_name, uniqueid)
+
+    # Run the asynchronous dialogue loop.
+    final_action = run_async_dialogue(agi, dm)
+
+    # If conversation completes and consent was given, store candidate details.
+    if dm.candidate_responses.get("consent") == "yes":
+        filename = save_candidate_details(dm.candidate_responses, uniqueid)
         agi.verbose(f"Candidate details saved to {filename}", level=1)
-    
-    final_message = (f"Fantastic, {candidate_name}! That's all we need for now. "
-                     f"Thank you for your time. Our team at {company_name} will review your details and reach out soon. Have a great day!")
-    final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
-    tts.generate_tts_file(final_message, final_wav)
-    agi.verbose("Playing final thank you message", level=1)
-    agi.stream_file(f"final_{uniqueid}")
-    
+
+    # Play final message if provided by dialogue manager.
+    if final_action and "prompt" in final_action:
+        final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
+        tts.generate_tts_file(final_action["prompt"], final_wav)
+        agi.verbose("Playing final thank you message", level=1)
+        agi.stream_file(f"final_{uniqueid}")
+
     agi.hangup()
 
 # -------------------------------------------------------------------------
@@ -283,7 +137,7 @@ if __name__ == "__main__":
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     handler.setFormatter(formatter)
     logger_server.addHandler(handler)
-    
+
     server = FastAGIServer((HOST, PORT), FastAGIHandler)
     server.logger = logger_server
     logger_server.info(f"Starting FastAGI server on {HOST}:{PORT}")
