@@ -203,46 +203,48 @@ def agi_main_flow_custom(agi):
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
     
+    candidate_name = "Ravinder"
+    
     questions = [
         {
             "key": "confirmation",
-            "question": f"Hello {candidate_name}, this is {company_name} calling. Are you still interested in joining our team?",
+            "question": f"Hi {candidate_name}! this is {company_name} calling. Hope you're doing well! We're excited to chat with you about an opportunity you might really dig. Before we dive in, can I just confirm—are you still interested in joining our team? Your interest means a lot to us!",
             "valid_options": ["yes", "no"],
             "exit_if": "no",
-            "exit_message": "Thank you for your time. Have a great day!"
+            "exit_message": "I see, I understand, Thank you so much for your time. Hope you have an amazing day!"
         },
         {
             "key": "qualification",
-            "question": "What is your highest qualification? Options: 10th, Post-graduate, Graduate, or 12th.",
+            "question": "Great, thanks for confirming! Let’s keep things moving. First off, could you tell me what your highest qualification is? Whether it’s 10th, Post-graduate, Graduate, or 12th, just let me know",
             "valid_options": ["10th", "post-graduate", "graduate", "12th"]
         },
         {
             "key": "diploma",
-            "question": "Since you said 10th, do you have a 3-year diploma? Answer yes or no.",
+            "question": "I see, by any chance, do you also have a 3-year diploma along with it?",
             "valid_options": ["yes", "no"],
             "condition": lambda responses: responses.get("qualification", "") == "10th"
         },
         {
             "key": "job_type",
-            "question": "Are you looking for a permanent full-time role, a part-time position, or a freelance/gig arrangement? Please answer accordingly.",
+            "question": "Perfect, that really helps. Next up, are you considering a full-time role or would a part-time position suit you better? Feel free to share what’s right for you.",
             "valid_options": ["permanent", "full time", "part-time", "freelance", "gig"]
         },
         {
             "key": "location",
-            "question": "What is your preferred location for work? Options: Amritsar, Vadodara, Kolkata, Banglore, Gurugram, or Pune.",
+            "question": "Awesome. Now, what’s your preferred location for work? We're currently offering positions in Amritsar, Vadodara, Kolkata, Banglore, Gurugram, and Pune.",
             "valid_options": ["amritsar", "vadodara", "kolkata", "banglore", "gurugram", "pune"]
         },
         {
             "key": "interview_mode",
-            "question": "How would you like to have your interview? Options: In-person, Virtual (Video Call), or Telephonic.",
+            "question": "Almost there—how would you like to have your interview? We offer a few options: an in-person meeting, a video call, or a phone interview. Which one would you prefer?",
             "valid_options": ["in-person", "virtual", "video call", "telephonic", "phone"]
         },
         {
             "key": "consent",
-            "question": "Do we have your permission to share this information with our internal team for follow-up? Answer yes or no.",
+            "question": "Thanks, that’s very helpful. Lastly, before we wrap up—do we have your permission to share all this information with our internal team so they can follow up with you? Your consent is important to us.",
             "valid_options": ["yes", "no"],
             "exit_if": "no",
-            "exit_message": "Thanks for your time. We respect your decision and will not share your details. Goodbye!"
+            "exit_message": "I understand, Thank you so much for your time. We respect your decision and will not share your details. Have an amazing day!"
         }
     ]
     
