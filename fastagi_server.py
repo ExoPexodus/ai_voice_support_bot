@@ -168,7 +168,7 @@ def ask_question(agi, question_data, uniqueid):
         validated = validate_option(response, valid_options)
         if validated is not None:
             if "exit_if" in question_data and validated == question_data["exit_if"].lower():
-                goodbye = question_data.get("exit_message", "Thank you for your time. Goodbye!")
+                goodbye = question_data.get("exit_message", "i see, Thank you so much for your time. Goodbye!")
                 goodbye_wav = f"/var/lib/asterisk/sounds/goodbye_{uniqueid}.wav"
                 tts.generate_tts_file(goodbye, goodbye_wav)
                 agi.stream_file(f"goodbye_{uniqueid}")
@@ -211,7 +211,7 @@ def agi_main_flow_custom(agi):
             "question": f"Hi {candidate_name}! this is {company_name} calling. Hope you're doing well! We're excited to chat with you about an opportunity you might really dig. Before we dive in, can I just confirm—are you still interested in joining our team? Your interest means a lot to us!",
             "valid_options": ["yes", "no"],
             "exit_if": "no",
-            "exit_message": "I see, I understand, Thank you so much for your time. Hope you have an amazing day!"
+            "exit_message": "I understand, Thank you so much for your time. Hope you have nice day!"
         },
         {
             "key": "qualification",
