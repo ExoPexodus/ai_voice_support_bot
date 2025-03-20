@@ -21,9 +21,6 @@ from src.ai import llm_client  # Azure LLM client
 from src.dialogue_manager import DialogueManager
 
 def save_candidate_details(candidate_details, uniqueid):
-    """
-    Saves candidate details to a JSON file.
-    """
     data_dir = "/var/lib/asterisk/candidate_data"
     os.makedirs(data_dir, exist_ok=True)
     filename = os.path.join(data_dir, f"candidate_{uniqueid}.json")
@@ -32,9 +29,6 @@ def save_candidate_details(candidate_details, uniqueid):
     return filename
 
 def run_async_dialogue(agi, dm):
-    """
-    Synchronously runs the asynchronous dialogue conversation.
-    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -53,7 +47,6 @@ def agi_main_flow_custom(agi):
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
 
-    # Define your conversation questions.
     questions = [
         {
             "key": "confirmation",
@@ -100,12 +93,10 @@ def agi_main_flow_custom(agi):
     dm = DialogueManager(questions, candidate_name, company_name, uniqueid)
     final_action = run_async_dialogue(agi, dm)
 
-    # If consent given, store candidate details.
     if dm.candidate_responses.get("consent") == "yes":
         filename = save_candidate_details(dm.candidate_responses, uniqueid)
         agi.verbose(f"Candidate details saved to {filename}", level=1)
 
-    # Play final prompt if provided.
     if final_action and "prompt" in final_action:
         final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
         tts.generate_tts_file(final_action["prompt"], final_wav)
@@ -114,9 +105,6 @@ def agi_main_flow_custom(agi):
 
     agi.hangup()
 
-# -------------------------------------------------------------------------
-# FastAGI Server Setup
-# -------------------------------------------------------------------------
 class FastAGIHandler(socketserver.StreamRequestHandler):
     def handle(self):
         try:
