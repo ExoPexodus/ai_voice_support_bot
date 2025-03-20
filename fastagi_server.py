@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 
 def fetch_candidates():
     """Fetch candidates from the 'hra' database in the 'users' collection."""
-    client = MongoClient(MONGO_URI)
+    client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
     db = client["hra"]
     users_collection = db["users"]
     # Filter for active candidates who haven't verified yet.
@@ -74,7 +74,7 @@ def initiate_outgoing_calls():
 
 def update_candidate(candidate_id, conversation_data):
     """Updates a candidate's record in MongoDB with conversation data."""
-    client = MongoClient(MONGO_URI)
+    client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
     db = client["hra"]
     users_collection = db["users"]
     users_collection.update_one({"_id": candidate_id}, {"$set": conversation_data})
