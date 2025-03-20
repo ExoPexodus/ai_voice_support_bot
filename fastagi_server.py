@@ -24,11 +24,15 @@ from src.ai import llm_client  # Azure LLM client
 def clean_llm_response(response):
     """
     Removes unwanted formatting tokens from the LLM response.
+    If response is None, returns an empty string.
     """
+    if response is None:
+        return ""
     tokens = ["<|im_start|>user<|im_sep|>", "<|im_start|>assistant<|im_sep|>", "<|im_end|>"]
     for token in tokens:
         response = response.replace(token, "")
     return response.strip()
+
 
 # -------------------------------------------------------------------------
 # AI Helper Functions
