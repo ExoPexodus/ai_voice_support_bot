@@ -19,67 +19,15 @@ from src.utils import logger
 from src.speech import tts, stt
 from src.ai import llm_client  # Azure LLM client
 from src.dialogue_manager import DialogueManager
-from src.config import MONGO_URI
 
-# --- MongoDB and AMI Integration ---
-from pymongo import MongoClient
-from asterisk.manager import Manager  # Ensure you have a suitable asterisk.manager module installed
-from dotenv import load_dotenv
+def save_candidate_details(candidate_details, uniqueid):
+    data_dir = "/var/lib/asterisk/candidate_data"
+    os.makedirs(data_dir, exist_ok=True)
+    filename = os.path.join(data_dir, f"candidate_{uniqueid}.json")
+    with open(filename, "w") as f:
+        json.dump(candidate_details, f, indent=4)
+    return filename
 
-
-
-def fetch_candidates():
-    """Fetch candidates from the 'hra' database in the 'users' collection."""
-    client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
-    db = client["hra"]
-    users_collection = db["users"]
-    # Filter for active candidates who haven't verified yet.
-    candidates = list(users_collection.find({"hasVerified": False, "IsActive": True}))
-    return candidates
-
-def initiate_outgoing_call(candidate):
-    """
-    Initiates an outgoing call to the candidate using AMI.
-    Passes candidate name and phone as variables.
-    """
-    try:
-        manager = Manager()
-        manager.connect("localhost")
-        # Use your AMI username and password here.
-        manager.login("agiuser", "asgfaksdgja23123127ygu12uh3ixjk213i21ix3n21")
-        action = {
-            "Action": "Originate",
-            "Channel": f"PJSIP/{candidate['phone']}",
-            "Context": "custom-agi",  # This should match the dialplan context for your AGI script.
-            "Exten": "s",
-            "Priority": "1",
-            "CallerID": candidate["phone"],
-            "Timeout": "30000",
-            # Pass candidate ID and name as channel variables so the AGI can access them.
-            "Variable": f"CANDIDATE_ID={candidate['_id']},CANDIDATE_NAME={candidate['name']}"
-        }
-        response = manager.send_action(action)
-        manager.logoff()
-        return response
-    except Exception as e:
-        print(f"Error initiating call for {candidate['name']}: {e}")
-        return None
-
-def initiate_outgoing_calls():
-    """Fetches candidates and initiates outgoing calls for each."""
-    candidates = fetch_candidates()
-    for candidate in candidates:
-        print(f"Initiating call to {candidate['name']} at {candidate['phone']}")
-        initiate_outgoing_call(candidate)
-
-def update_candidate(candidate_id, conversation_data):
-    """Updates a candidate's record in MongoDB with conversation data."""
-    client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
-    db = client["hra"]
-    users_collection = db["users"]
-    users_collection.update_one({"_id": candidate_id}, {"$set": conversation_data})
-
-# --- Synchronous wrapper for async dialogue ---
 def run_async_dialogue(agi, dm):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -96,11 +44,9 @@ def agi_main_flow_custom(agi):
     env = agi.env
     log.info("AGI Environment: %s", env)
     uniqueid = env.get("agi_uniqueid", "default")
-    candidate_name = env.get("CANDIDATE_NAME", env.get("agi_calleridname", "Candidate"))
-    candidate_id = env.get("CANDIDATE_ID", None)
+    candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
 
-    # Define the conversation questions.
     questions = [
         {
             "key": "confirmation",
@@ -147,12 +93,9 @@ def agi_main_flow_custom(agi):
     dm = DialogueManager(questions, candidate_name, company_name, uniqueid)
     final_action = run_async_dialogue(agi, dm)
 
-    # If candidate consented, update the candidate record in Mongo.
-    if dm.candidate_responses.get("consent") == "yes" and candidate_id:
-        update_candidate(candidate_id, dm.candidate_responses)
-        agi.verbose(f"Candidate details updated in MongoDB for candidate_id {candidate_id}", level=1)
-    else:
-        agi.verbose("Candidate did not consent or candidate_id not provided.", level=1)
+    if dm.candidate_responses.get("consent") == "yes":
+        filename = save_candidate_details(dm.candidate_responses, uniqueid)
+        agi.verbose(f"Candidate details saved to {filename}", level=1)
 
     if final_action and "prompt" in final_action:
         final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
@@ -177,49 +120,6 @@ class FastAGIServer(socketserver.ForkingTCPServer):
     allow_reuse_address = True
 
 if __name__ == "__main__":
-    # Initiate outgoing calls first.
-    print("Initiating outgoing calls to candidates...")
-    from pymongo import MongoClient
-    from asterisk.manager import Manager
-
-    def initiate_outgoing_call(candidate):
-        try:
-            manager = Manager()
-            manager.connect("localhost")
-            manager.login("agiuser", "asgfaksdgja23123127ygu12uh3ixjk213i21ix3n21")
-            action = {
-                "Action": "Originate",
-                "Channel": f"PJSIP/{candidate['phone']}",
-                "Context": "custom-agi",  # This should match your dialplan.
-                "Exten": "s",
-                "Priority": "1",
-                "CallerID": candidate["phone"],
-                "Timeout": "30000",
-                "Variable": f"CANDIDATE_ID={candidate['_id']},CANDIDATE_NAME={candidate['name']}"
-            }
-            response = manager.send_action(action)
-            manager.logoff()
-            return response
-        except Exception as e:
-            print(f"Error initiating call for {candidate['name']}: {e}")
-            return None
-
-    def fetch_candidates():
-        client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
-        db = client["hra"]
-        users_collection = db["users"]
-        candidates = list(users_collection.find({"hasVerified": False, "IsActive": True}))
-        return candidates
-
-    def initiate_outgoing_calls():
-        candidates = fetch_candidates()
-        for candidate in candidates:
-            print(f"Initiating call to {candidate['name']} at {candidate['phone']}")
-            initiate_outgoing_call(candidate)
-
-    initiate_outgoing_calls()
-
-    # Start the FastAGI server.
     HOST, PORT = "0.0.0.0", 4577
     logger_server = logging.getLogger("FastAGIServer")
     logger_server.setLevel(logging.INFO)
