@@ -170,6 +170,8 @@ def agi_main_flow_custom(agi):
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
     
+    candidate_name = "Jatin"
+    
     questions = [
         {
             "key": "confirmation",
