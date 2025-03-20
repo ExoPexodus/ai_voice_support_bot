@@ -8,3 +8,5 @@ services:
       - "4577:4577"
     env_file:
       - .env
+    volumes:
+      - /var/lib/asterisk/sounds:/var/lib/asterisk/sounds
