@@ -100,14 +100,22 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
     current_prompt = f"Hi! Am i speaking with {candidate_name}?"
     conversation_history.append({"role": "assistant", "content": current_prompt})
     
-    # Send initial prompt to candidate via TTS.
-    init_wav = f"/var/lib/asterisk/sounds/init_{uniqueid}.wav"
-    tts.generate_tts_file(current_prompt, init_wav)
+    # Instead of writing to /var/lib/asterisk/sounds directly, we use our new TTS streaming function,
+    # which writes to the symlinked in-memory folder (e.g., /var/lib/asterisk/sounds/dev_shm).
+    # The filename passed (without extension) will be used by speak_text_stream() to generate a file ending in .ulaw.
+    init_filename = f"init_{uniqueid}"
+    try:
+        init_wav_full = tts.speak_text_stream(current_prompt, init_filename)
+    except Exception as e:
+        agi.verbose(f"TTS streaming error: {e}", level=1)
+        return conversation_history
+
     agi.verbose(f"Playing initial prompt: {current_prompt}", level=1)
-    agi.stream_file(f"init_{uniqueid}")
-    
+    # Assuming that Asterisk can locate the file by specifying the symlink relative path.
+    agi.stream_file(f"dev_shm/{init_filename}")
+
     while True:
-        # Record candidate's response.
+        # Record candidate input.
         input_filename = f"input_{uniqueid}"
         input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
         agi.verbose("Recording candidate input...", level=1)
@@ -119,57 +127,56 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
         
         if user_response == "":
             farewell = "No input received. Ending session. Goodbye!"
-            farewell_wav = f"/var/lib/asterisk/sounds/farewell_{uniqueid}.wav"
-            tts.generate_tts_file(farewell, farewell_wav)
-            agi.stream_file(f"farewell_{uniqueid}")
+            farewell_filename = f"farewell_{uniqueid}"
+            try:
+                farewell_wav_full = tts.speak_text_stream(farewell, farewell_filename)
+            except Exception as e:
+                agi.verbose(f"TTS streaming error: {e}", level=1)
+                break
+            agi.stream_file(f"dev_shm/{farewell_filename}")
             break
         
-        # NEW: Use our hybrid exit intent detector.
         if detect_exit_intent(user_response):
             final_prompt = "I understand. Thank you for your time. Goodbye! [END_CONVERSATION]"
             conversation_history.append({"role": "assistant", "content": final_prompt})
-            final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
-            tts.generate_tts_file(final_prompt.replace("[END_CONVERSATION]", "").strip(), final_wav)
+            final_filename = f"final_{uniqueid}"
+            try:
+                final_wav_full = tts.speak_text_stream(final_prompt.replace("[END_CONVERSATION]", "").strip(), final_filename)
+            except Exception as e:
+                agi.verbose(f"TTS streaming error: {e}", level=1)
+                break
             agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
-            agi.stream_file(f"final_{uniqueid}")
+            agi.stream_file(f"dev_shm/{final_filename}")
             break
         
-        # Append candidate response to conversation history.
         conversation_history.append({"role": "user", "content": user_response})
         
-        # Call the LLM with full conversation history.
         next_prompt = llm_client.query_llm(conversation_history)
         next_prompt = next_prompt.strip() if next_prompt else ""
         next_prompt = next_prompt.replace("<|im_start|>assistant<|im_sep|>", "").replace("<|im_end|>", "")
-        
-        # Append AI response to conversation history.
         conversation_history.append({"role": "assistant", "content": next_prompt})
         
-        # Check if the AI indicates that the conversation is complete.
-        if "[EARY_END_CONVERSATION]" in next_prompt:
-            # Remove marker from the final prompt.
-            final_prompt = next_prompt.replace("[EARY_END_CONVERSATION]", "").strip()
-            final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
-            tts.generate_tts_file(final_prompt, final_wav)
+        if "[EARY_END_CONVERSATION]" in next_prompt or "[END_CONVERSATION]" in next_prompt:
+            final_prompt = next_prompt.replace("[EARY_END_CONVERSATION]", "").replace("[END_CONVERSATION]", "").strip()
+            final_filename = f"final_{uniqueid}"
+            try:
+                final_wav_full = tts.speak_text_stream(final_prompt, final_filename)
+            except Exception as e:
+                agi.verbose(f"TTS streaming error: {e}", level=1)
+                break
             agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
-            agi.stream_file(f"final_{uniqueid}")
-            break
-        
-        # Check if the AI indicates that the conversation is complete.
-        if "[END_CONVERSATION]" in next_prompt:
-            # Remove marker from the final prompt.
-            final_prompt = next_prompt.replace("[END_CONVERSATION]", "").strip()
-            final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
-            tts.generate_tts_file(final_prompt, final_wav)
-            agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
-            agi.stream_file(f"final_{uniqueid}")
+            agi.stream_file(f"dev_shm/{final_filename}")
             break
         
         # Otherwise, play the next prompt.
-        next_wav = f"/var/lib/asterisk/sounds/next_{uniqueid}.wav"
-        tts.generate_tts_file(next_prompt, next_wav)
+        next_filename = f"next_{uniqueid}"
+        try:
+            next_wav_full = tts.speak_text_stream(next_prompt, next_filename)
+        except Exception as e:
+            agi.verbose(f"TTS streaming error: {e}", level=1)
+            break
         agi.verbose(f"Playing next prompt: {next_prompt}", level=1)
-        agi.stream_file(f"next_{uniqueid}")
+        agi.stream_file(f"dev_shm/{next_filename}")
     
     return conversation_history
 
@@ -193,9 +200,8 @@ def agi_main_flow_custom(agi):
     uniqueid = env.get("agi_uniqueid", "default")
     candidate_name = env.get("agi_calleridname", "Candidate")
     company_name = os.getenv("COMPANY_NAME", "Maxicus")
-    candidate_name="Jatin"
+    candidate_name = "Jatin"
     
-    # Run the unified conversation agent asynchronously.
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -205,12 +211,6 @@ def agi_main_flow_custom(agi):
     finally:
         loop.close()
     
-    # Here you would extract useful information from conversation_history.
-    # For simplicity, we'll assume the candidate's details are within the conversation_history.
-    # If the conversation included consent (e.g., "yes" in the final part), then store data.
-    # In a real implementation, you'd parse the conversation_history to extract structured data.
-    # For now, we can store the entire conversation_history.
-    # Check for consent in the conversation_history, for example by searching for "permission" responses.
     consent_given = any("permission" in msg.get("content", "").lower() and "yes" in msg.get("content", "").lower() 
                         for msg in conversation_history if msg["role"] == "user")
     

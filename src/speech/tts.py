@@ -4,6 +4,61 @@ import subprocess
 import os
 from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, AZURE_TTS_VOICE
 
+def ensure_symlink():
+    """
+    Ensure that a symlink exists from the Asterisk sounds directory to /dev/shm.
+    This allows Asterisk to access in-memory TTS audio files.
+    """
+    sounds_dir = "/var/lib/asterisk/sounds"
+    symlink_path = os.path.join(sounds_dir, "dev_shm")
+    
+    # If the symlink already exists and points to /dev/shm, we're done.
+    if os.path.islink(symlink_path):
+        if os.readlink(symlink_path) == "/dev/shm":
+            return symlink_path
+        else:
+            os.remove(symlink_path)  # Remove incorrect symlink
+
+    # Create the symlink if it doesn't exist.
+    try:
+        os.symlink("/dev/shm", symlink_path)
+        print(f"Symlink created: {symlink_path} -> /dev/shm")
+    except Exception as e:
+        print(f"Failed to create symlink: {e}")
+    return symlink_path
+
+
+def speak_text_stream(text, filename_base):
+    """
+    Synthesizes speech from text using Azure TTS streaming, writing audio bytes to a file.
+    The output file is written in mu-law format suitable for Asterisk.
+    """
+    # Define the output path
+    output_path = f"/var/lib/asterisk/sounds/{filename_base}.ulaw"
+
+    # Configure the speech synthesis settings
+    speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
+    speech_config.speech_synthesis_voice_name = AZURE_TTS_VOICE or "en-IN-NeerjaNeural"
+    speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff8Khz8BitMonoMulaw)
+
+    # Create a synthesizer with no audio output configuration
+    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+
+    # Start the synthesis and get the result
+    result = synthesizer.speak_text_async(text).get()
+    if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
+        cancellation_details = result.cancellation_details
+        raise Exception(f"Speech synthesis canceled: {cancellation_details.reason}, {cancellation_details.error_details}")
+
+    # Get the audio data stream
+    audio_stream = speechsdk.AudioDataStream(result)
+
+    # Write the stream data to the output file
+    with open(output_path, "wb") as f:
+        f.write(audio_stream.readall())
+
+    return output_path
+
 def text_to_speech(text):
     """
     Converts text to speech using Azure TTS and plays via default speaker.
