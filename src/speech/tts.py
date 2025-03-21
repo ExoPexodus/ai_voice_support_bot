@@ -31,37 +31,42 @@ def ensure_symlink():
 def speak_text_stream(text, filename_base):
     """
     Synthesizes speech from text using Azure TTS streaming, writing audio bytes to a file.
-    The output file is written to an in-memory folder via a symlink.
+    The output file is written in a symlinked in-memory folder for low latency.
     
-    NOTE: Instead of using 'Riff8Khz8BitMonoMulaw' (which your voice may not support),
-    we use 'Riff24Khz16BitMonoPcm', which is supported by neural voices.
-    You can then decide if you want to convert this PCM output to mu-law on the fly in memory.
+    NOTE: We use a supported format (PCM) since your neural voice may not support mu-law directly.
     """
-    # Ensure the symlink exists and get its path.
-    symlink_path = ensure_symlink()  # e.g., /var/lib/asterisk/sounds/dev_shm
-    # Construct the output file path in the symlink folder.
+    # Get the symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
+    symlink_path = ensure_symlink()
+    # Build the output file path in the symlinked directory.
     output_path = os.path.join(symlink_path, f"{filename_base}.wav")
     
-    # Configure the speech synthesis settings.
+    # Configure speech synthesis settings.
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
     speech_config.speech_synthesis_voice_name = AZURE_TTS_VOICE or "en-IN-NeerjaNeural"
-    # Use a supported output format for neural voices.
+    # Use a supported output format (PCM)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
     
-    # Create a synthesizer without audio config (we handle the stream ourselves).
+    # Create a synthesizer without an audio output configuration.
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
     
+    # Synthesize the text.
     result = synthesizer.speak_text_async(text).get()
     if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
         cancellation_details = result.cancellation_details
         raise Exception(f"Speech synthesis canceled: {cancellation_details.reason}, {cancellation_details.error_details}")
     
+    # Get the audio data stream.
     audio_stream = speechsdk.AudioDataStream(result)
     
+    # Write the stream data in chunks.
+    chunk_size = 1024
     with open(output_path, "wb") as f:
-        f.write(audio_stream.readall())
+        while True:
+            chunk = audio_stream.read_data(chunk_size)
+            if len(chunk) == 0:
+                break
+            f.write(chunk)
     
-    # Optionally, you could perform an in-memory conversion here if Asterisk strictly requires mu-law.
     return output_path
 
 def text_to_speech(text):
