@@ -30,14 +30,14 @@ def ensure_symlink():
 
 def speak_text_stream(text, filename_base):
     """
-    Synthesizes speech from text using Azure TTS streaming, writing audio bytes to a file.
-    The output file is written to an in-memory folder (via a symlink) for low latency.
+    Synthesizes speech from text using Azure TTS streaming, writing the entire audio 
+    to a file in an in-memory folder (via a symlink) for low latency.
     
-    NOTE: We're using a supported output format (PCM) since neural voices may not support mu-law directly.
+    This version uses the built-in save_to_wav_file() method, avoiding manual chunk handling.
     """
     # Get the symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
     symlink_path = ensure_symlink()
-    # Construct the output file path inside the symlinked directory.
+    # Construct the output file path in the symlinked directory.
     output_path = os.path.join(symlink_path, f"{filename_base}.wav")
     
     # Configure the speech synthesis settings.
@@ -46,7 +46,7 @@ def speak_text_stream(text, filename_base):
     # Use a supported output format (PCM)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
     
-    # Create a synthesizer without an audio output configuration.
+    # Create a synthesizer with no audio output configuration.
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
     
     # Synthesize the text.
@@ -60,23 +60,8 @@ def speak_text_stream(text, filename_base):
     if audio_stream is None:
         raise Exception("AudioDataStream is None.")
     
-    # Write the stream data in chunks.
-    chunk_size = 1024  # ensure this is an integer
-    with open(output_path, "wb") as f:
-        while True:
-            cs = int(chunk_size)
-            chunk = audio_stream.read_data(cs)
-            if chunk is None:
-                print("Chunk is None, breaking out of loop.")
-                break
-            if not isinstance(chunk, bytes):
-                print(f"Unexpected data type: {type(chunk).__name__}, skipping chunk...")
-                continue
-            if len(chunk) == 0:
-                print("Received an empty chunk, breaking out of loop.")
-                break
-            print(f"Writing chunk of size: {len(chunk)} bytes")
-            f.write(chunk)
+    # Use the built-in method to save the entire stream to a WAV file.
+    audio_stream.save_to_wav_file(output_path)
     
     return output_path
 
