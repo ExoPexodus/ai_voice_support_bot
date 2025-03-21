@@ -38,7 +38,7 @@ def speech_to_text(timeout=30):
     def _recognize_once():
         speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
         # Here you can use AZURE_STT_LANGUAGE or a hardcoded language
-        speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, language=AZURE_STT_LANGUAGE)
+        speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, language="hi-IN")
         print(f"Say something... (Listening in {AZURE_STT_LANGUAGE})")
         result = speech_recognizer.recognize_once()
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:

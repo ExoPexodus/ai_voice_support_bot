@@ -10,7 +10,7 @@ def text_to_speech(text):
     """
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
     # Choose your voice
-    speech_config.speech_synthesis_voice_name = AZURE_TTS_VOICE or "en-IN-NeerjaNeural"
+    speech_config.speech_synthesis_voice_name = "hi-IN-AnanyaNeural"
     audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
     result = synthesizer.speak_text_async(text).get()

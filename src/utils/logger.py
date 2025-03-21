@@ -4,7 +4,7 @@ def setup_logger():
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     # Create file handler which logs even debug messages
-    fh = logging.FileHandler('/var/log/ai_voice_support_bot.log')
+    fh = logging.FileHandler('./ai_voice_support_bot.log')
     fh.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     fh.setFormatter(formatter)

@@ -45,7 +45,7 @@ def agi_main_flow():
     uniqueid = env.get("agi_uniqueid", "default")
     
     # === Play Welcome Message ===
-    welcome_message = "Welcome to Zomato customer support. How can I assist you today?"
+    welcome_message = "Hi! am i speaking with jatin?"
     welcome_wav = f"/var/lib/asterisk/sounds/welcome_{uniqueid}.wav"
     tts.generate_tts_file(welcome_message, welcome_wav)
     # Assume the conversion creates /var/lib/asterisk/sounds/welcome_{uniqueid}.ulaw

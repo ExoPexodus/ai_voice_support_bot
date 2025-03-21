@@ -43,28 +43,38 @@ def extract_order_number(text):
 def main_flow():
     log = logger.setup_logger()
     log.info("Starting AI Voice Support Bot...")
-
-    # Play a welcome message when the user connects
-    welcome_message = "Welcome to Zomato customer support. How can I assist you today?"
-    tts.text_to_speech(welcome_message)
     
+    company_name = "Maxicus"
+    candidate_name = "Jatin"
+    
+    # Play a welcome message when the user connects
+    #welcome_message = f"Hi! Am i speaking with {candidate_name}?"
+    welcome_message = f"नमस्ते, क्या मैं {candidate_name} से बात कर रही हूँ?"
+    tts.text_to_speech(welcome_message)
+
     # Initialize conversation history with a system prompt for context
-    system_prompt = "You are a female customer support executive working for zomato, you are an expert at dealing with customers in food industry, answer all their questions according to how a customer support would. Keep in mind that you'll be in a call with the customer so Make sure you have a very nice and gentle tone when dealing with the customer, And also make sure to give very short and very concise and to the point answers(don't use any special caracters or emojis or any brackets to express any additional emotions or actions)"
+    system_prompt = (
+    f"You are a friendly, conversational AI recruiter for {company_name} and you're currently talking to {candidate_name}. After confirming the candidate's identity, immediately generate a dynamic, context-aware opening that naturally sets the purpose of the call. This opening should be creative, engaging, and reflect excitement about the opportunity at {company_name} without relying on pre-written templates."
+    "Your duty is to re-engage candidates who dropped out of the application process and to gather the following details: highest qualification, preferred work location (choose only from [amritsar, vadodara, kolkata, bangalore, gurugram, pune]), and interview mode (choose only from [in-person, virtual/video call, telephonic/phone]). If the candidate states 10th grade as their highest qualification, additionally ask if they hold a 3-year diploma."
+    "Conduct the conversation naturally by asking one question at a time, building context as you go—do not bombard the candidate with multiple questions at once. Keep your sentences short, clear, and to the point. If the candidate expresses disinterest (for example, by saying 'no', 'bye', or 'not interested'), immediately end the conversation and append the marker [EARLY_END_CONVERSATION] to your final message. Once all required details are collected, ask for the candidate's consent to store their information, and if granted, conclude your conversation by appending the marker [END_CONVERSATION] and no need to tell them to ask you any further questions at the end."
+    "Remember, you must stay strictly within this context and refrain from addressing any topics that do not relate to gathering the required details. Also, Strictly do not use any emojis."
+    "and Make sure your responses are as concise as possible"
+    )
     conversation_history = [{"role": "system", "content": system_prompt}]
 
     # Define exit keywords for ending the session
-    exit_keywords = ["bye", "exit", "quit", "end call", "end the call", "goodbye", "thank you", "that's all"]
+    exit_keywords = ["bye", "exit", "quit", "end call", "end the call", "goodbye", "thank you", "that's all", "no", "not really"]
 
     while True:
         # Wait for user input with a 30-second timeout
         user_input = stt.speech_to_text(timeout=60)
         if user_input is None:
-            tts.text_to_speech("No input received for 60 seconds. Ending session. Goodbye!")
+            tts.text_to_speech("No input received. Ending session. Goodbye!")
             break
-        
+            
         # Check if any exit keyword is contained in the user input
         if any(keyword in user_input.lower() for keyword in exit_keywords):
-            tts.text_to_speech("Thank you for contacting Zomato support. Have a great day!")
+            tts.text_to_speech("Thank you for your time. Have a great day!")
             break
         
         log.info("User said: %s", user_input)
