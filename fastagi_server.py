@@ -19,6 +19,9 @@ from src.utils import logger
 from src.speech import tts, stt
 from src.ai import llm_client  # Azure LLM client
 from src.ai.ai_helpers import clean_llm_response
+from src.speech.hybrid import HybridSTT
+from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
+
 
 
 def detect_exit_intent(response):
@@ -106,77 +109,83 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
     # Use the new TTS streaming function to write the TTS output to in-memory storage.
     init_filename = f"init_{uniqueid}"
     try:
-        init_wav_full = tts.speak_text_stream(current_prompt, init_filename)
+        init_audio = tts.speak_text_stream(current_prompt, init_filename)
     except Exception as e:
         agi.verbose(f"TTS streaming error: {e}", level=1)
         return conversation_history
-
     agi.verbose(f"Playing initial prompt: {current_prompt}", level=1)
-    # Stream the file from the symlinked in-memory folder.
     agi.stream_file(f"dev_shm/{init_filename}")
     
-    while True:
-        # Record candidate's response.
-        input_filename = f"input_{uniqueid}"
-        input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
-        agi.verbose("Recording candidate input...", level=1)
-        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="", silence=10)
-        time.sleep(0.005)
-        user_response = stt.recognize_from_file(input_wav)
-        user_response = user_response.strip() if user_response else ""
-        agi.verbose(f"Candidate said: {user_response}", level=1)
-        
-        if user_response == "":
-            farewell = "No input received. Ending session. Goodbye!"
-            farewell_filename = f"farewell_{uniqueid}"
-            try:
-                farewell_wav_full = tts.speak_text_stream(farewell, farewell_filename)
-            except Exception as e:
-                agi.verbose(f"TTS streaming error: {e}", level=1)
-                break
-            agi.stream_file(f"dev_shm/{farewell_filename}")
-            break
-        
-        if detect_exit_intent(user_response):
-            final_prompt = "I understand. Thank you for your time. Goodbye! [END_CONVERSATION]"
-            conversation_history.append({"role": "assistant", "content": final_prompt})
-            final_filename = f"final_{uniqueid}"
-            try:
-                final_wav_full = tts.speak_text_stream(final_prompt.replace("[END_CONVERSATION]", "").strip(), final_filename)
-            except Exception as e:
-                agi.verbose(f"TTS streaming error: {e}", level=1)
-                break
-            agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
-            agi.stream_file(f"dev_shm/{final_filename}")
-            break
-        
-        conversation_history.append({"role": "user", "content": user_response})
-        
-        next_prompt = llm_client.query_llm(conversation_history)
-        next_prompt = next_prompt.strip() if next_prompt else ""
-        next_prompt = next_prompt.replace("<|im_start|>assistant<|im_sep|>", "").replace("<|im_end|>", "")
-        conversation_history.append({"role": "assistant", "content": next_prompt})
-        
-        if "[EARY_END_CONVERSATION]" in next_prompt or "[END_CONVERSATION]" in next_prompt:
-            final_prompt = next_prompt.replace("[EARY_END_CONVERSATION]", "").replace("[END_CONVERSATION]", "").strip()
-            final_filename = f"final_{uniqueid}"
-            try:
-                final_wav_full = tts.speak_text_stream(final_prompt, final_filename)
-            except Exception as e:
-                agi.verbose(f"TTS streaming error: {e}", level=1)
-                break
-            agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
-            agi.stream_file(f"dev_shm/{final_filename}")
-            break
-        
-        next_filename = f"next_{uniqueid}"
+    # Now, instead of file-based STT, use HybridSTT for live recognition.
+    # Start the hybrid STT process.
+    agi.verbose("Starting continuous STT recognition...", level=1)
+    stt_instance = HybridSTT(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, silence_threshold=1.5)
+    
+    # Optionally, you can define a callback if needed:
+    finalized_text = {"text": ""}
+    def on_finalized(text):
+        finalized_text["text"] = text
+        print(f"[STT] Finalized utterance: {text}")
+    stt_instance.on_finalized = on_finalized
+    
+    # Await the STT recognition result (this runs until silence is detected).
+    user_response = await stt_instance.start_recognition()
+    user_response = user_response.strip() if user_response else ""
+    agi.verbose(f"Candidate said: {user_response}", level=1)
+    
+    if user_response == "":
+        farewell = "No input received. Ending session. Goodbye!"
+        farewell_filename = f"farewell_{uniqueid}"
         try:
-            next_wav_full = tts.speak_text_stream(next_prompt, next_filename)
+            farewell_audio = tts.speak_text_stream(farewell, farewell_filename)
         except Exception as e:
             agi.verbose(f"TTS streaming error: {e}", level=1)
-            break
-        agi.verbose(f"Playing next prompt: {next_prompt}", level=1)
-        agi.stream_file(f"dev_shm/{next_filename}")
+            return conversation_history
+        agi.stream_file(f"dev_shm/{farewell_filename}")
+        return conversation_history
+    
+    if detect_exit_intent(user_response):
+        final_prompt = "I understand. Thank you for your time. Goodbye! [END_CONVERSATION]"
+        conversation_history.append({"role": "assistant", "content": final_prompt})
+        final_filename = f"final_{uniqueid}"
+        try:
+            final_audio = tts.speak_text_stream(final_prompt.replace("[END_CONVERSATION]", "").strip(), final_filename)
+        except Exception as e:
+            agi.verbose(f"TTS streaming error: {e}", level=1)
+            return conversation_history
+        agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
+        agi.stream_file(f"dev_shm/{final_filename}")
+        return conversation_history
+    
+    # Append the recognized user response to the conversation history.
+    conversation_history.append({"role": "user", "content": user_response})
+    
+    # Send the conversation history to the LLM to get the next prompt.
+    next_prompt = llm_client.query_llm(conversation_history)
+    next_prompt = next_prompt.strip() if next_prompt else ""
+    next_prompt = next_prompt.replace("<|im_start|>assistant<|im_sep|>", "").replace("<|im_end|>", "")
+    conversation_history.append({"role": "assistant", "content": next_prompt})
+    
+    if "[EARY_END_CONVERSATION]" in next_prompt or "[END_CONVERSATION]" in next_prompt:
+        final_prompt = next_prompt.replace("[EARY_END_CONVERSATION]", "").replace("[END_CONVERSATION]", "").strip()
+        final_filename = f"final_{uniqueid}"
+        try:
+            final_audio = tts.speak_text_stream(final_prompt, final_filename)
+        except Exception as e:
+            agi.verbose(f"TTS streaming error: {e}", level=1)
+            return conversation_history
+        agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
+        agi.stream_file(f"dev_shm/{final_filename}")
+        return conversation_history
+    
+    next_filename = f"next_{uniqueid}"
+    try:
+        next_audio = tts.speak_text_stream(next_prompt, next_filename)
+    except Exception as e:
+        agi.verbose(f"TTS streaming error: {e}", level=1)
+        return conversation_history
+    agi.verbose(f"Playing next prompt: {next_prompt}", level=1)
+    agi.stream_file(f"dev_shm/{next_filename}")
     
     return conversation_history
 
