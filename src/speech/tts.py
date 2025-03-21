@@ -35,7 +35,7 @@ def speak_text_stream(text, filename_base):
     
     NOTE: We're using a supported output format (PCM) since neural voices may not support mu-law directly.
     """
-    # Get the symlink path (e.g. /var/lib/asterisk/sounds/dev_shm)
+    # Get the symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
     symlink_path = ensure_symlink()
     # Construct the output file path inside the symlinked directory.
     output_path = os.path.join(symlink_path, f"{filename_base}.wav")
@@ -46,7 +46,7 @@ def speak_text_stream(text, filename_base):
     # Use a supported output format (PCM)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
     
-    # Create a synthesizer without an audio output config.
+    # Create a synthesizer without an audio output configuration.
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
     
     # Synthesize the text.
@@ -57,21 +57,25 @@ def speak_text_stream(text, filename_base):
     
     # Get the audio data stream.
     audio_stream = speechsdk.AudioDataStream(result)
+    if audio_stream is None:
+        raise Exception("AudioDataStream is None.")
     
     # Write the stream data in chunks.
     chunk_size = 1024  # ensure this is an integer
     with open(output_path, "wb") as f:
         while True:
-            try:
-                # Ensure chunk_size is integer
-                cs = int(chunk_size)
-            except Exception:
-                cs = 1024
+            cs = int(chunk_size)
             chunk = audio_stream.read_data(cs)
-            if not isinstance(chunk, bytes):
-                raise Exception(f"Expected bytes but got {type(chunk).__name__}")
-            if len(chunk) == 0:
+            if chunk is None:
+                print("Chunk is None, breaking out of loop.")
                 break
+            if not isinstance(chunk, bytes):
+                print(f"Unexpected data type: {type(chunk).__name__}, skipping chunk...")
+                continue
+            if len(chunk) == 0:
+                print("Received an empty chunk, breaking out of loop.")
+                break
+            print(f"Writing chunk of size: {len(chunk)} bytes")
             f.write(chunk)
     
     return output_path
