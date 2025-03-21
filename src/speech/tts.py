@@ -31,13 +31,13 @@ def ensure_symlink():
 def speak_text_stream(text, filename_base):
     """
     Synthesizes speech from text using Azure TTS streaming, writing audio bytes to a file.
-    The output file is written in a symlinked in-memory folder for low latency.
+    The output file is written to an in-memory folder via a symlink.
     
-    NOTE: We use a supported format (PCM) since your neural voice may not support mu-law directly.
+    NOTE: We use a supported output format (PCM) since neural voices may not support mu-law directly.
     """
     # Get the symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
     symlink_path = ensure_symlink()
-    # Build the output file path in the symlinked directory.
+    # Construct the output file path in the symlink folder.
     output_path = os.path.join(symlink_path, f"{filename_base}.wav")
     
     # Configure speech synthesis settings.
@@ -46,7 +46,7 @@ def speak_text_stream(text, filename_base):
     # Use a supported output format (PCM)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
     
-    # Create a synthesizer without an audio output configuration.
+    # Create a synthesizer with no audio output config.
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
     
     # Synthesize the text.

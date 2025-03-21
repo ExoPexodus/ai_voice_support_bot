@@ -103,6 +103,7 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
     # Instead of writing to /var/lib/asterisk/sounds directly, we use our new TTS streaming function,
     # which writes to the symlinked in-memory folder (e.g., /var/lib/asterisk/sounds/dev_shm).
     # The filename passed (without extension) will be used by speak_text_stream() to generate a file ending in .ulaw.
+    # Use the new TTS streaming function to write the TTS output to in-memory storage.
     init_filename = f"init_{uniqueid}"
     try:
         init_wav_full = tts.speak_text_stream(current_prompt, init_filename)
@@ -111,11 +112,11 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
         return conversation_history
 
     agi.verbose(f"Playing initial prompt: {current_prompt}", level=1)
-    # Assuming that Asterisk can locate the file by specifying the symlink relative path.
+    # Stream the file from the symlinked in-memory folder.
     agi.stream_file(f"dev_shm/{init_filename}")
-
+    
     while True:
-        # Record candidate input.
+        # Record candidate's response.
         input_filename = f"input_{uniqueid}"
         input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
         agi.verbose("Recording candidate input...", level=1)
@@ -168,7 +169,6 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
             agi.stream_file(f"dev_shm/{final_filename}")
             break
         
-        # Otherwise, play the next prompt.
         next_filename = f"next_{uniqueid}"
         try:
             next_wav_full = tts.speak_text_stream(next_prompt, next_filename)
