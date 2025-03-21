@@ -59,10 +59,13 @@ def speak_text_stream(text, filename_base):
     audio_stream = speechsdk.AudioDataStream(result)
     
     # Write the stream data in chunks.
-    chunk_size = 1024
+    chunk_size = 1024  # integer value
     with open(output_path, "wb") as f:
         while True:
-            chunk = audio_stream.read_data(chunk_size)
+            # Force chunk_size to be int
+            chunk = audio_stream.read_data(int(chunk_size))
+            if not isinstance(chunk, bytes):
+                raise Exception(f"Expected bytes but got {type(chunk).__name__}")
             if len(chunk) == 0:
                 break
             f.write(chunk)
