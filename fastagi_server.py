@@ -1,4 +1,4 @@
-#!/fastagi_server.py
+#/fastagi_server.py
 """
 fastagi_server.py - FastAGI server for your Hiring Voice Bot.
 This server listens for AGI requests over TCP and dispatches them to a unified AI conversation agent,
@@ -76,6 +76,7 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
     # Define a system prompt that instructs the AI on conversation goals.
     system_prompt = (
         f"You are a friendly, conversational AI recruiter for {company_name}. "
+        f"you're currently talking to {candidate_name}"
         "Your goal is to collect the following details from the candidate: confirmation of interest, highest qualification, "
         "job type preference, preferred work location, and interview mode. "
         "for highest qualification, we only have 4 options: [10th, post-graduate, graduate, 12th]"

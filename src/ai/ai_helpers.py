@@ -1,4 +1,4 @@
-# src/ai_helpers.py
+# src/ai/ai_helpers.py
 
 from src.ai import llm_client
 
