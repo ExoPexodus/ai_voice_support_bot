@@ -42,7 +42,7 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
         "Engage in a natural conversation by asking one question at a time and building context as the conversation progresses. "
         "Do not overwhelm the candidate by asking all questions at once. "
         "keep your sentenses as concise and little as possible"
-        "If the candidate expresses disinterest (for example, says 'no' or 'bye'), end the conversation immediately. "
+        "If the candidate expresses disinterest (for example, says 'no' or 'bye' or says he's not interested), end the conversation immediately and output a final prompt that includes the marker [EARY_END_CONVERSATION]. "
         "Once all required details are collected, ask for the candidate's consent to store the information. "
         "When you have all the information and consent is given, output a final prompt that includes the marker [END_CONVERSATION] "
         "at the end of your message."
@@ -91,6 +91,16 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
         conversation_history.append({"role": "assistant", "content": next_prompt})
         
         # Check if the AI indicates that the conversation is complete.
+        if "[EARY_END_CONVERSATION]" in next_prompt:
+            # Remove marker from the final prompt.
+            final_prompt = next_prompt.replace("[EARY_END_CONVERSATION]", "").strip()
+            final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
+            tts.generate_tts_file(final_prompt, final_wav)
+            agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
+            agi.stream_file(f"final_{uniqueid}")
+            break
+        
+                # Check if the AI indicates that the conversation is complete.
         if "[END_CONVERSATION]" in next_prompt:
             # Remove marker from the final prompt.
             final_prompt = next_prompt.replace("[END_CONVERSATION]", "").strip()
