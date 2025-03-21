@@ -111,7 +111,7 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
         input_filename = f"input_{uniqueid}"
         input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
         agi.verbose("Recording candidate input...", level=1)
-        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="", silence=5)
+        agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="", silence=15)
         time.sleep(2)
         user_response = stt.recognize_from_file(input_wav)
         user_response = user_response.strip() if user_response else ""
