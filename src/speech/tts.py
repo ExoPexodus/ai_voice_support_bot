@@ -30,40 +30,55 @@ def ensure_symlink():
 
 def speak_text_stream(text, filename_base):
     """
-    Synthesizes speech from text using Azure TTS streaming, writing the entire audio 
-    to a file in an in-memory folder (via a symlink) for low latency.
+    Synthesizes speech from text using Azure TTS streaming, writing the synthesized audio
+    to a file in an in-memory folder via a symlink, then converting it to mu-law using ffmpeg.
     
-    This version uses the built-in save_to_wav_file() method, avoiding manual chunk handling.
+    This method first saves the PCM output as a WAV file (using save_to_wav_file) in /dev/shm,
+    then converts it to mu-law (which Asterisk prefers) with ffmpeg.
+    
+    Returns the full path of the final mu-law file.
     """
-    # Get the symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
+    # Get symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
     symlink_path = ensure_symlink()
-    # Construct the output file path in the symlinked directory.
-    output_path = os.path.join(symlink_path, f"{filename_base}.wav")
+    # Create paths for the temporary WAV file and the final mu-law file.
+    wav_path = os.path.join(symlink_path, f"{filename_base}.wav")
+    final_path = os.path.join(symlink_path, f"{filename_base}.ulaw")
     
-    # Configure the speech synthesis settings.
+    # Configure TTS settings.
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
     speech_config.speech_synthesis_voice_name = AZURE_TTS_VOICE or "en-IN-NeerjaNeural"
-    # Use a supported output format (PCM)
+    # Use PCM output format (supported by neural voices).
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
     
-    # Create a synthesizer with no audio output configuration.
+    # Create synthesizer with no audio output configuration.
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
     
-    # Synthesize the text.
+    # Synthesize text.
     result = synthesizer.speak_text_async(text).get()
     if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
         cancellation_details = result.cancellation_details
-        raise Exception(f"Speech synthesis canceled: {cancellation_details.reason}, {cancellation_details.error_details}")
+        raise Exception(f"TTS synthesis canceled: {cancellation_details.reason}, {cancellation_details.error_details}")
     
     # Get the audio data stream.
     audio_stream = speechsdk.AudioDataStream(result)
     if audio_stream is None:
         raise Exception("AudioDataStream is None.")
     
-    # Use the built-in method to save the entire stream to a WAV file.
-    audio_stream.save_to_wav_file(output_path)
+    # Save the synthesized PCM audio directly to a WAV file in /dev/shm.
+    audio_stream.save_to_wav_file(wav_path)
+    print(f"[INFO] Saved PCM WAV file to: {wav_path}")
     
-    return output_path
+    # Now convert the WAV file to mu-law using ffmpeg.
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-i", wav_path,
+            "-ar", "8000", "-ac", "1", "-f", "mulaw", final_path
+        ], check=True)
+        print(f"[INFO] Converted to mu-law file: {final_path}")
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"ffmpeg conversion failed: {e}")
+    
+    return final_path
 
 def text_to_speech(text):
     """
