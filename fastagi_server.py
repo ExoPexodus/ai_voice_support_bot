@@ -103,10 +103,7 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
     current_prompt = f"Hi! Am i speaking with {candidate_name}?"
     conversation_history.append({"role": "assistant", "content": current_prompt})
     
-    # Instead of writing to /var/lib/asterisk/sounds directly, we use our new TTS streaming function,
-    # which writes to the symlinked in-memory folder (e.g., /var/lib/asterisk/sounds/dev_shm).
-    # The filename passed (without extension) will be used by speak_text_stream() to generate a file ending in .ulaw.
-    # Use the new TTS streaming function to write the TTS output to in-memory storage.
+    # Play TTS prompt as before
     init_filename = f"init_{uniqueid}"
     try:
         init_audio = tts.speak_text_stream(current_prompt, init_filename)
@@ -116,19 +113,25 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
     agi.verbose(f"Playing initial prompt: {current_prompt}", level=1)
     agi.stream_file(f"dev_shm/{init_filename}")
     
-    # Now, instead of file-based STT, use HybridSTT for live recognition.
-    # Start the hybrid STT process.
-    agi.verbose("Starting continuous STT recognition...", level=1)
+    # Record candidate input to a file.
+    input_filename = f"input_{uniqueid}"
+    input_wav = f"/var/lib/asterisk/sounds/{input_filename}.wav"
+    agi.verbose("Recording candidate input...", level=1)
+    agi.record_file(input_filename, format="wav", escape_digits="#", timeout=60000, offset=0, beep="", silence=10)
+    time.sleep(0.005)  # Minimal delay
+    
+    # Instead of using stt.recognize_from_file, use HybridSTT.
     stt_instance = HybridSTT(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, silence_threshold=1.5)
     
-    # Optionally, you can define a callback if needed:
-    finalized_text = {"text": ""}
+    # Define callback (optional)
     def on_finalized(text):
-        finalized_text["text"] = text
-        print(f"[STT] Finalized utterance: {text}")
+        print(f"[STT] Finalized text: {text}")
     stt_instance.on_finalized = on_finalized
     
-    # Await the STT recognition result (this runs until silence is detected).
+    # Feed the recorded file into the push stream.
+    stt_instance.feed_audio_from_file(input_wav)
+    
+    # Start recognition and wait for silence detection.
     user_response = await stt_instance.start_recognition()
     user_response = user_response.strip() if user_response else ""
     agi.verbose(f"Candidate said: {user_response}", level=1)
@@ -157,10 +160,8 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
         agi.stream_file(f"dev_shm/{final_filename}")
         return conversation_history
     
-    # Append the recognized user response to the conversation history.
     conversation_history.append({"role": "user", "content": user_response})
     
-    # Send the conversation history to the LLM to get the next prompt.
     next_prompt = llm_client.query_llm(conversation_history)
     next_prompt = next_prompt.strip() if next_prompt else ""
     next_prompt = next_prompt.replace("<|im_start|>assistant<|im_sep|>", "").replace("<|im_end|>", "")
