@@ -31,22 +31,22 @@ def ensure_symlink():
 def speak_text_stream(text, filename_base):
     """
     Synthesizes speech from text using Azure TTS streaming, writing audio bytes to a file.
-    The output file is written to an in-memory folder via a symlink.
+    The output file is written to an in-memory folder (via a symlink) for low latency.
     
-    NOTE: We use a supported output format (PCM) since neural voices may not support mu-law directly.
+    NOTE: We're using a supported output format (PCM) since neural voices may not support mu-law directly.
     """
-    # Get the symlink path (e.g., /var/lib/asterisk/sounds/dev_shm)
+    # Get the symlink path (e.g. /var/lib/asterisk/sounds/dev_shm)
     symlink_path = ensure_symlink()
-    # Construct the output file path in the symlink folder.
+    # Construct the output file path inside the symlinked directory.
     output_path = os.path.join(symlink_path, f"{filename_base}.wav")
     
-    # Configure speech synthesis settings.
+    # Configure the speech synthesis settings.
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
     speech_config.speech_synthesis_voice_name = AZURE_TTS_VOICE or "en-IN-NeerjaNeural"
     # Use a supported output format (PCM)
     speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
     
-    # Create a synthesizer with no audio output config.
+    # Create a synthesizer without an audio output config.
     synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
     
     # Synthesize the text.
@@ -59,11 +59,15 @@ def speak_text_stream(text, filename_base):
     audio_stream = speechsdk.AudioDataStream(result)
     
     # Write the stream data in chunks.
-    chunk_size = 1024  # integer value
+    chunk_size = 1024  # ensure this is an integer
     with open(output_path, "wb") as f:
         while True:
-            # Force chunk_size to be int
-            chunk = audio_stream.read_data(int(chunk_size))
+            try:
+                # Ensure chunk_size is integer
+                cs = int(chunk_size)
+            except Exception:
+                cs = 1024
+            chunk = audio_stream.read_data(cs)
             if not isinstance(chunk, bytes):
                 raise Exception(f"Expected bytes but got {type(chunk).__name__}")
             if len(chunk) == 0:
