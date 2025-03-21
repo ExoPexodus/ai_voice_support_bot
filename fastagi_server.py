@@ -19,6 +19,7 @@ from src.utils import logger
 from src.speech import tts, stt
 from src.ai import llm_client  # Azure LLM client
 from src.ai.ai_helpers import clean_llm_response
+from pymongo import MongoClient
 
 
 def detect_exit_intent(response):
@@ -62,6 +63,56 @@ def detect_exit_intent(response):
     raw_result = llm_client.query_llm(conversation)
     result = clean_llm_response(raw_result).strip().lower()
     return result == "yes"
+
+def fetch_candidate_info():
+    """
+    Connects to MongoDB, fetches a candidate's document from the 'hra' database in the 'users' collection.
+    Returns a dict with 'name' and 'phone' if found, otherwise None.
+    """
+    try:
+        client = MongoClient("mongodb://root:1KKjasndawdsa1@172.17.52.65:27017/hra?authSource=admin")
+        db = client["hra"]
+        # Fetch one active user; adjust your query as needed.
+        user = db.users.find_one({"IsActive": True})
+        if user:
+            return {"name": user.get("name"), "phone": user.get("phone")}
+    except Exception as e:
+        # Yeah, log the error and move on.
+        logging.error("MongoDB connection/query error: %s", e)
+    return None
+
+def send_outgoing_call(agi, phone_number,company_name):
+    """
+    Initiates an outgoing call using Asterisk's Originate command.
+    
+    Required parameters:
+      - channel: e.g. "SIP/<phone_number>"
+      - exten: dialplan extension to handle the call (must be defined in your dialplan)
+      - context: dialplan context where the extension is defined
+      - priority: starting priority (usually "1")
+      - timeout: timeout (in seconds) to wait for the call to be answered
+      - callerid: Caller ID string in proper format
+      - (Optional) Additional variable assignments if needed
+    
+    Example Originate command:
+      Originate SIP/+917696040116 6001 outgoing 1 30 "CompanyName" ""
+    """
+    # Set up the necessary parameters
+    channel = f"SIP/{phone_number}"
+    exten = "6001"              # The extension defined in your dialplan to handle the call
+    context = "outgoing"        # The dialplan context where your extension is located
+    priority = "1"              # Starting priority for the dialplan extension
+    timeout = "30"              # Wait 30 seconds for an answer
+    callerid = f'{company_name}'  # Your desired caller ID
+    
+    # Build the Originate command
+    originate_cmd = f"Originate {channel} {exten} {context} {priority} {timeout} {callerid}"
+    agi.verbose(f"Executing Originate command: {originate_cmd}", level=1)
+    
+    # Execute the command via AGI (this will vary based on your AGI setup)
+    result = agi.exec_command(originate_cmd)
+    agi.verbose(f"Originate command result: {result}", level=1)
+
 
 # -------------------------------------------------------------------------
 # Unified Conversation Agent
