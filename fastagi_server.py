@@ -18,6 +18,50 @@ from asterisk.agi import AGI
 from src.utils import logger
 from src.speech import tts, stt
 from src.ai import llm_client  # Azure LLM client
+from src.ai.ai_helpers import clean_llm_response
+
+
+def detect_exit_intent(response):
+    """
+    Determines if the candidate's response indicates an intent to end the conversation.
+    Uses a rule-based check with negative keywords and a simple sentiment score.
+    If the result is ambiguous, falls back to an LLM call.
+    
+    Returns True if exit intent is detected, otherwise False.
+    """
+    if not response:
+        return False
+
+    resp = response.lower().strip()
+    
+    # Rule-based negative keyword check.
+    negative_keywords = [
+        "no", "not interested", "bye", "exit", "quit", "stop", "end", "later",
+        "i'm done", "i'm leaving", "goodbye", "see you", "thank you, bye", "nah", "nope"
+    ]
+    
+    # If any negative keyword is present, return True immediately.
+    for kw in negative_keywords:
+        if kw in resp:
+            return True
+
+    # A simple lexicon-based sentiment heuristic:
+    negative_words = ["not", "never", "can't", "won't", "don't", "dislike", "uninterested"]
+    negative_score = sum(1 for word in negative_words if word in resp)
+    
+    # If we detect multiple negative words, consider it as exit intent.
+    if negative_score >= 2:
+        return True
+
+    # Fallback: use LLM to decide if the response signals an exit intent.
+    prompt = (
+        f"Does the following candidate response indicate an intent to end the conversation? \"{response}\" "
+        "Respond with only 'yes' or 'no'."
+    )
+    conversation = [{"role": "system", "content": prompt}]
+    raw_result = llm_client.query_llm(conversation)
+    result = clean_llm_response(raw_result).strip().lower()
+    return result == "yes"
 
 # -------------------------------------------------------------------------
 # Unified Conversation Agent
@@ -79,6 +123,16 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
             agi.stream_file(f"farewell_{uniqueid}")
             break
         
+        # NEW: Use our hybrid exit intent detector.
+        if detect_exit_intent(user_response):
+            final_prompt = "I understand. Thank you for your time. Goodbye! [END_CONVERSATION]"
+            conversation_history.append({"role": "assistant", "content": final_prompt})
+            final_wav = f"/var/lib/asterisk/sounds/final_{uniqueid}.wav"
+            tts.generate_tts_file(final_prompt.replace("[END_CONVERSATION]", "").strip(), final_wav)
+            agi.verbose(f"Playing final prompt: {final_prompt}", level=1)
+            agi.stream_file(f"final_{uniqueid}")
+            break
+        
         # Append candidate response to conversation history.
         conversation_history.append({"role": "user", "content": user_response})
         
@@ -100,7 +154,7 @@ async def conversation_agent(agi, candidate_name, company_name, uniqueid):
             agi.stream_file(f"final_{uniqueid}")
             break
         
-                # Check if the AI indicates that the conversation is complete.
+        # Check if the AI indicates that the conversation is complete.
         if "[END_CONVERSATION]" in next_prompt:
             # Remove marker from the final prompt.
             final_prompt = next_prompt.replace("[END_CONVERSATION]", "").strip()
