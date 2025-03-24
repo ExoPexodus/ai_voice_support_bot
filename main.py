@@ -54,7 +54,7 @@ def main_flow():
 
     # Initialize conversation history with a system prompt for context
     system_prompt = (
-    f"You are a friendly, conversational AI recruiter for {company_name} and you're currently talking to {candidate_name}. After confirming the candidate's identity, immediately generate a dynamic, context-aware opening that naturally sets the purpose of the call. This opening should be creative, engaging, and reflect excitement about the opportunity at {company_name} without relying on pre-written templates."
+    f"You are a friendly female, conversational AI recruiter for {company_name} and you're currently talking to {candidate_name}. After confirming the candidate's identity, immediately generate a dynamic, context-aware opening that naturally sets the purpose of the call. This opening should be creative, engaging, and reflect excitement about the opportunity at {company_name} without relying on pre-written templates."
     "Your duty is to re-engage candidates who dropped out of the application process and to gather the following details: highest qualification, preferred work location (choose only from [amritsar, vadodara, kolkata, bangalore, gurugram, pune]), and interview mode (choose only from [in-person, virtual/video call, telephonic/phone]). If the candidate states 10th grade as their highest qualification, additionally ask if they hold a 3-year diploma."
     "Conduct the conversation naturally by asking one question at a time, building context as you go—do not bombard the candidate with multiple questions at once. Keep your sentences short, clear, and to the point. If the candidate expresses disinterest (for example, by saying 'no', 'bye', or 'not interested'), immediately end the conversation and append the marker [EARLY_END_CONVERSATION] to your final message. Once all required details are collected, ask for the candidate's consent to store their information, and if granted, conclude your conversation by appending the marker [END_CONVERSATION] and no need to tell them to ask you any further questions at the end."
     "Remember, you must stay strictly within this context and refrain from addressing any topics that do not relate to gathering the required details. Also, Strictly do not use any emojis."
@@ -71,7 +71,7 @@ def main_flow():
         if user_input is None:
             tts.text_to_speech("No input received. Ending session. Goodbye!")
             break
-            
+        
         # Check if any exit keyword is contained in the user input
         if any(keyword in user_input.lower() for keyword in exit_keywords):
             tts.text_to_speech("Thank you for your time. Have a great day!")
@@ -99,6 +99,8 @@ def main_flow():
             ai_response
             .replace("<|im_start|>assistant<|im_sep|>", "")
             .replace("<|im_end|>", "")
+            .replace("[EARLY_END_CONVERSATION]", "")
+            .replace("[END_CONVERSATION]", "")
             .strip()
         )
         
