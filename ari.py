@@ -1,11 +1,12 @@
 import asyncio
-import ari
 import time
 import azure.cognitiveservices.speech as speechsdk
 from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
 
 # Assume HybridSTT is defined as in our previous implementation.
 from src.speech.hybrid import HybridSTT
+from ari import client
+
 
 # ARI configuration (ensure these match your Asterisk settings)
 ARI_URL = "http://localhost:8088"
@@ -43,7 +44,7 @@ async def handle_channel(channel):
 
 async def main():
     # Connect to ARI using the ARI library
-    client = ari.connect(ARI_URL, ARI_USERNAME, ARI_PASSWORD, app=STASIS_APP)
+    ariclient = client.connect(ARI_URL, ARI_USERNAME, ARI_PASSWORD, app=STASIS_APP)
     print("[ARI] Connected to ARI. Waiting for channels to join...")
     
     # Wait for a channel to join the Stasis application
@@ -54,7 +55,7 @@ async def main():
         if not future.done():
             future.set_result(channel)
     
-    client.on_channel_event("StasisStart", on_channel)
+    ariclient.on_channel_event("StasisStart", on_channel)
     
     channel = await future  # Wait until a channel joins.
     transcript = await handle_channel(channel)
