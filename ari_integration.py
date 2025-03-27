@@ -5,7 +5,7 @@ from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
 
 # Assume HybridSTT is defined as in our previous implementation.
 from src.speech.hybrid import HybridSTT
-from ari import client
+from ari_integration import client
 
 
 # ARI configuration (ensure these match your Asterisk settings)
