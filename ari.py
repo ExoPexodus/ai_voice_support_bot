@@ -5,7 +5,7 @@ import azure.cognitiveservices.speech as speechsdk
 from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
 
 # Assume HybridSTT is defined as in our previous implementation.
-from src.stt.hybrid import HybridSTT
+from src.speech.hybrid import HybridSTT
 
 # ARI configuration (ensure these match your Asterisk settings)
 ARI_URL = "http://localhost:8088"
