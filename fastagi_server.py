@@ -23,7 +23,6 @@ from src.speech.hybrid import HybridSTT
 from src.config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
 
 
-
 def detect_exit_intent(response):
     """
     Determines if the candidate's response indicates an intent to end the conversation.
